@@ -632,6 +632,9 @@ function buildDiaria(ym){
 
 window.atualizarResumoFinanceiro = async function(){
   if (window.renderDiaria) window.renderDiaria();
+  if (window.renderContasPagar) window.renderContasPagar();
+  if (window.renderConciliacaoDias) window.renderConciliacaoDias();
+  if (window.renderAnual) window.renderAnual();
   var sb = window.sb;
   if (!sb) return;
   try{
@@ -643,6 +646,9 @@ window.atualizarResumoFinanceiro = async function(){
     var dados = (atual.data && atual.data.dados) || {};
     dados.financeiro_mes = { receita: c.apurado.total, despesas_compras: -(c.despesa + c.compras), saldo: c.saldo_final_apurado };
     dados.conciliacao = { diferenca: Math.round(diferenca*100)/100, confere: Math.abs(diferenca) < 1 };
+    if (typeof DATA !== 'undefined' && DATA.contas_pagar){
+      dados.contas_pagar = { planejado: DATA.contas_pagar.total.planejado, realizado: DATA.contas_pagar.total.realizado };
+    }
     await sb.from('resumo_cache').update({ dados: dados, atualizado_em: new Date().toISOString() }).eq('id',1);
   }catch(e){ /* resumo é best-effort */ }
 };
@@ -658,6 +664,14 @@ var CATEGORIA_TO_GRUPO_TOP = {
   'Fixas / consumo': 'FIXAS / CONSUMO',
   'Outros': 'OUTROS'
 };
+
+function nomesPlanejadosDoGrupoTop(categoria){
+  var grupoNome = CATEGORIA_TO_GRUPO_TOP[categoria];
+  if (!grupoNome) return [];
+  var grupo = (EXTERNAL.contas_pagar.grupos || []).filter(function(g){ return g.nome === grupoNome; })[0];
+  if (!grupo) return [];
+  return (grupo.itens || []).map(function(it){ return it.nome; }).filter(Boolean);
+}
 
 function normDescTop(s){ return String(s||'').trim().toLowerCase().replace(/\s+/g,' '); }
 
@@ -1199,7 +1213,8 @@ renderDiaria();
 
 // ================= MENSAL =================
 // ================= CONTAS A PAGAR =================
-(function renderContasPagar() {
+window.renderContasPagar = function renderContasPagar() {
+  DATA = buildData();
   const cp = DATA.contas_pagar;
   const kpiC = document.getElementById('kpi-contaspagar');
   kpiC.innerHTML = '';
@@ -1219,10 +1234,13 @@ renderDiaria();
   rows += `<tr><td>TOTAL</td><td class="num">${fmtBRL(cp.total.planejado)}</td><td class="num">${fmtBRL(cp.total.realizado)}</td></tr>`;
   document.getElementById('tabela-contaspagar').innerHTML =
     `<thead><tr><th>Grupo / item</th><th class="num">Planejado</th><th class="num">Realizado</th></tr></thead><tbody>${rows}</tbody>`;
-})();
+};
+renderContasPagar();
 
 // ================= CONCILIACAO =================
-(function renderConciliacao() {
+// ================= CONCILIACAO (tabela dia a dia) =================
+window.renderConciliacaoDias = function renderConciliacaoDias() {
+  DATA = buildData();
   const cc = DATA.conciliacao;
   let rows = '';
   cc.dias.forEach(r => {
@@ -1233,10 +1251,12 @@ renderDiaria();
   rows += `<tr><td>TOTAL</td><td class="num">${fmtBRL(cc.totais.dinheiro)}</td><td class="num">${fmtBRL(cc.totais.pix)}</td><td class="num">${fmtBRL(cc.totais.cartao)}</td><td class="num">${cc.totais.estornos ? '-' + fmtBRL(cc.totais.estornos) : '—'}</td><td class="num">${fmtBRL(cc.totais.total)}</td></tr>`;
   document.getElementById('tabela-conciliacao').innerHTML =
     `<thead><tr><th>Data</th><th class="num">Dinheiro</th><th class="num">Pix</th><th class="num">Cartão</th><th class="num">Estornos</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody>`;
-})();
+};
+renderConciliacaoDias();
 
 // ================= ANUAL (divisão de lucros da sociedade) =================
-(function renderAnual() {
+window.renderAnual = function renderAnual() {
+  DATA = buildData();
   const as = DATA.anual_socios;
   const fmtOrDash = (v) => v == null ? '—' : fmtBRL(v);
 
@@ -1287,7 +1307,8 @@ renderDiaria();
       arrow.innerHTML = isOpen ? '&#9656;' : '&#9662;';
     });
   });
-})();
+};
+renderAnual();
 
 document.getElementById('ref-mes').textContent = REF_MES;
 document.getElementById('ref-atualizacao').textContent = DATA_ATUALIZADA_EM;
@@ -1908,7 +1929,8 @@ window.initFinanceiro = async function initFinanceiro(){
     }).join('') + '</select></div>';
     html += '</div>';
     html += fieldNum('despesa-valor', 'Valor', v.valor);
-    html += '<div class="field"><label>Descrição</label><input type="text" id="despesa-desc" value="' + escapeAttr(v.descricao) + '" placeholder="ex: Energia Agosto"></div>';
+    html += '<div class="field"><label>Descrição</label><input type="text" id="despesa-desc" list="despesa-desc-lista" value="' + escapeAttr(v.descricao) + '" placeholder="ex: Energia Agosto"><datalist id="despesa-desc-lista">' + nomesPlanejadosDoGrupoTop(v.categoria).map(function(n){ return '<option value="' + escapeAttr(n) + '">'; }).join('') + '</datalist></div>';
+    html += '<div class="mod-aviso">Escolhendo um nome já cadastrado no planejado, o valor lançado casa direto com aquela linha em Contas a Pagar.</div>';
     html += '<div class="field"><label>Seu nome (quem está lançando)</label><input type="text" id="despesa-nome" value="' + escapeAttr(myName()) + '" placeholder="ex: Bruna"></div>';
     html += '<div style="display:flex; gap:8px;"><button type="submit" class="btn">' + (editing?'Salvar alterações':'Salvar despesa') + '</button>';
     if (editing) html += ' <button type="button" class="btn secondary" id="despesa-cancel-edit">Cancelar edição</button>';
@@ -2148,6 +2170,15 @@ window.initFinanceiro = async function initFinanceiro(){
     // ---- Despesas ----
     var formDespesa = document.getElementById('form-despesa');
     if (formDespesa) {
+      var despesaCategoriaEl = document.getElementById('despesa-categoria');
+      if (despesaCategoriaEl){
+        despesaCategoriaEl.addEventListener('change', function(){
+          var lista = document.getElementById('despesa-desc-lista');
+          if (lista) lista.innerHTML = nomesPlanejadosDoGrupoTop(despesaCategoriaEl.value).map(function(n){
+            return '<option value="' + n.replace(/</g,'&lt;').replace(/"/g,'&quot;') + '">';
+          }).join('');
+        });
+      }
       formDespesa.addEventListener('submit', function(ev){
         ev.preventDefault();
         var nome = document.getElementById('despesa-nome').value.trim();
@@ -2339,7 +2370,7 @@ window.initModulos = async function initModulos(){
 
   /* ---------------------------- CARGA INICIAL ---------------------------- */
   var r1 = await sb.from('colaboradores').select('*').order('nome');
-  L.colaboradores = (r1.data || []).map(function(c){ return { id: c.id, nome: c.nome }; });
+  L.colaboradores = (r1.data || []).map(function(c){ return { id: c.id, nome: c.nome, aniversario: c.aniversario || '' }; });
 
   var r2 = await sb.from('registros_equipe').select('*').order('em', { ascending:false });
   L.registrosEquipe = (r2.data || []).map(function(r){ return { id:r.id, colaborador:r.colaborador, texto:r.texto, data:r.data, em:r.em }; });
@@ -2373,11 +2404,56 @@ window.initModulos = async function initModulos(){
       .sort(function(a,b){ return String(b.em).localeCompare(String(a.em)); });
   }
 
+  function maskDDMM(v){
+    v = (v || '').replace(/\D/g, '').slice(0, 4);
+    var out = v.slice(0, 2);
+    if (v.length > 2) out += '/' + v.slice(2, 4);
+    return out;
+  }
+  function ddmmParaMMDD(str){
+    var m = /^(\d{2})\/(\d{2})$/.exec(str || '');
+    if (!m) return null;
+    var dd = +m[1], mm = +m[2];
+    if (mm < 1 || mm > 12) return null;
+    var diasMes = [31,29,31,30,31,30,31,31,30,31,30,31];
+    if (dd < 1 || dd > diasMes[mm-1]) return null;
+    return String(mm).padStart(2,'0') + '-' + String(dd).padStart(2,'0');
+  }
+  function mmddParaDDMM(mmdd){
+    if (!mmdd) return '';
+    var p = mmdd.split('-');
+    return p[1] + '/' + p[0];
+  }
+  function diasAteAniversario(mmdd){
+    if (!mmdd) return null;
+    var p = mmdd.split('-').map(Number);
+    var h = new Date(); h.setHours(0,0,0,0);
+    var alvo = new Date(h.getFullYear(), p[0]-1, p[1]);
+    if (alvo < h) alvo.setFullYear(alvo.getFullYear()+1);
+    return Math.round((alvo - h) / 86400000);
+  }
+
   function paintEquipe(){
     var box = document.getElementById('mod-equipe');
     if (!box) return;
     var h = '';
     h += '<div class="mod-bar"><span id="msg-equipe" class="mod-msg"></span></div>';
+
+    var proximos = L.colaboradores
+      .map(function(c){ return { nome:c.nome, dias: diasAteAniversario(c.aniversario) }; })
+      .filter(function(c){ return c.dias !== null && c.dias <= 7; })
+      .sort(function(a,b){ return a.dias - b.dias; });
+    h += '<div class="card"><h3>Aniversários próximos</h3>';
+    h += '<div class="cardsub">Para dar tempo de programar alguma coisa — 7 dias de antecedência.</div>';
+    if (proximos.length){
+      proximos.forEach(function(c){
+        var txt = c.dias === 0 ? '🎉 Hoje!' : (c.dias === 1 ? 'amanhã' : 'em ' + c.dias + ' dias');
+        h += '<div class="mod-item"><span class="txt">' + esc(c.nome) + '</span><span class="mod-tag' + (c.dias===0?' ok':'') + '">' + txt + '</span></div>';
+      });
+    } else {
+      h += '<div class="mod-vazio">Nenhum nos próximos 7 dias.</div>';
+    }
+    h += '</div>';
 
     h += '<div class="card"><h3>Registrar</h3>';
     h += '<div class="cardsub">Toque no nome e escreva o que aconteceu, do jeito que você contaria na reunião.</div>';
@@ -2395,8 +2471,18 @@ window.initModulos = async function initModulos(){
     }
     h += '</div>';
 
-    h += '<div class="card"><h3>Adicionar colaborador</h3>';
-    h += '<div class="mod-linha"><input class="mod-campo" id="eq-novo" placeholder="Nome" style="max-width:220px">';
+    h += '<div class="card"><h3>Colaboradores</h3>';
+    L.colaboradores.forEach(function(c){
+      h += '<div class="mod-item"><span class="txt">' + esc(c.nome);
+      h += '<br><span class="mod-msg">aniversário: ' + (c.aniversario ? esc(mmddParaDDMM(c.aniversario)) : 'não definido') + '</span></span>';
+      h += '<button class="mod-mini" data-editar-aniv="' + c.id + '">editar</button></div>';
+      h += '<div class="mod-linha" id="ed-aniv-' + c.id + '" style="display:none">';
+      h += '<input class="mod-campo" type="text" inputmode="numeric" pattern="[0-9/]*" maxlength="5" placeholder="DD/MM" id="in-aniv-' + c.id + '" style="max-width:100px" value="' + (c.aniversario ? esc(mmddParaDDMM(c.aniversario)) : '') + '">';
+      h += '<button class="btn-dash" data-salvar-aniv="' + c.id + '">Salvar</button></div>';
+    });
+    h += '<div class="mod-linha" style="margin-top:12px">';
+    h += '<input class="mod-campo" id="eq-novo" placeholder="Nome" style="max-width:160px">';
+    h += '<input class="mod-campo" type="text" inputmode="numeric" pattern="[0-9/]*" maxlength="5" placeholder="Aniversário DD/MM" id="eq-novo-aniv" style="max-width:130px">';
     h += '<button class="btn-dash" id="eq-add">Adicionar</button></div></div>';
 
     L.colaboradores.forEach(function(c){
@@ -2426,6 +2512,9 @@ window.initModulos = async function initModulos(){
       });
       ta.focus();
     }
+    box.querySelectorAll('input[id^="in-aniv-"], #eq-novo-aniv').forEach(function(inp){
+      inp.addEventListener('input', function(){ inp.value = maskDDMM(inp.value); });
+    });
   }
 
   async function atualizarResumoEquipe(){
@@ -2435,6 +2524,7 @@ window.initModulos = async function initModulos(){
   }
 
   async function handlersEquipe(e){
+
     var t = e.target;
     var b = t.closest ? t.closest('[data-nome]') : null;
     if (b){ colabSel = b.getAttribute('data-nome'); paintEquipe(); return; }
@@ -2461,12 +2551,39 @@ window.initModulos = async function initModulos(){
       var inp = document.getElementById('eq-novo');
       var nome = inp ? inp.value.trim() : '';
       if (!nome) return;
+      var anivInp = document.getElementById('eq-novo-aniv');
+      var aniv = anivInp ? ddmmParaMMDD(anivInp.value) : null;
       t.disabled = true;
-      var res2 = await sb.from('colaboradores').insert({ id: uid(), nome: nome }).select().single();
+      var novoColab = { id: uid(), nome: nome };
+      if (aniv) novoColab.aniversario = aniv;
+      var res2 = await sb.from('colaboradores').insert(novoColab).select().single();
       t.disabled = false;
       if (res2.error){ avisar('msg-equipe', 'Não consegui adicionar — tenta de novo.'); return; }
-      L.colaboradores.push({ id: res2.data.id, nome: res2.data.nome });
+      L.colaboradores.push({ id: res2.data.id, nome: res2.data.nome, aniversario: res2.data.aniversario || '' });
       L.colaboradores.sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+      paintEquipe();
+      return;
+    }
+
+    var edId = t.getAttribute && t.getAttribute('data-editar-aniv');
+    if (edId){
+      var campo = document.getElementById('ed-aniv-' + edId);
+      if (campo) campo.style.display = campo.style.display === 'none' ? 'flex' : 'none';
+      return;
+    }
+
+    var salvarId = t.getAttribute && t.getAttribute('data-salvar-aniv');
+    if (salvarId){
+      var inpAniv = document.getElementById('in-aniv-' + salvarId);
+      var valor = inpAniv ? inpAniv.value.trim() : '';
+      var mmdd = valor ? ddmmParaMMDD(valor) : null;
+      if (valor && !mmdd){ avisar('msg-equipe', 'Data inválida — use DD/MM.'); return; }
+      t.disabled = true;
+      var res3 = await sb.from('colaboradores').update({ aniversario: mmdd }).eq('id', salvarId);
+      t.disabled = false;
+      if (res3.error){ avisar('msg-equipe', 'Não consegui salvar — tenta de novo.'); return; }
+      var colab = L.colaboradores.filter(function(c){ return c.id === salvarId; })[0];
+      if (colab) colab.aniversario = mmdd || '';
       paintEquipe();
       return;
     }
@@ -2909,6 +3026,9 @@ window.initMenu = function initMenu(){
       await window.initFinanceiro();
       await window.initSaldoOnline();
       if (window.renderDiaria) window.renderDiaria();
+      if (window.renderContasPagar) window.renderContasPagar();
+      if (window.renderConciliacaoDias) window.renderConciliacaoDias();
+      if (window.renderAnual) window.renderAnual();
       await window.initModulos();
       await window.initSatisfacao();
       if (window.initMenu) window.initMenu();
