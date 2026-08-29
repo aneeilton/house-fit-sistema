@@ -2820,8 +2820,8 @@ window.initMenu = function initMenu(){
       { v:'validade', t:'Validade', d:'Lotes por dias de venda restantes',
         n: vl.total ? vl.alerta + ' em alerta' : 'sem lotes', cls: vl.alerta ? 'alerta' : 'ok' },
       { v:'satisfacao', t:'Satisfação', d:'Comentários e pedidos de retorno',
-        n: (window.satisfacaoResumoAtual ? window.satisfacaoResumoAtual.total + (window.satisfacaoResumoAtual.total===1?' resposta':' respostas') : '—'),
-        cls: (window.satisfacaoResumoAtual && window.satisfacaoResumoAtual.pedemRetorno) ? 'alerta' : '' },
+        n: (window.satisfacaoResumoAtual ? (window.satisfacaoResumoAtual.naoLidas ? window.satisfacaoResumoAtual.naoLidas + (window.satisfacaoResumoAtual.naoLidas===1?' não lida':' não lidas') : 'em dia') : '—'),
+        cls: (window.satisfacaoResumoAtual && window.satisfacaoResumoAtual.naoLidas) ? 'alerta' : 'ok' },
       { v:'conciliacao', t:'Conciliação', d:'Confronto do online com o lançado', n: conc.txt, cls: conc.cls },
       { v:'contaspagar', t:'Contas a pagar', d:'Fixas, parceiros e impostos', n:'', cls:'' },
       { v:'anual', t:'Anual', d:'Resultado do ano e divisão por sócio', n:'', cls:'' }
@@ -2998,7 +2998,6 @@ window.initSatisfacao = async function initSatisfacao(){
     return -1;
   }
 
-  // "28/08/2026 22:47:54" -> {mm:'08', yyyy:'2026'}
   function parseCarimbo(str){
     var m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(str || '');
     if (!m) return null;
@@ -3034,6 +3033,7 @@ window.initSatisfacao = async function initSatisfacao(){
 
   var respostas = linhas.slice(1).map(function(l){
     return {
+      id: idxData >= 0 ? l[idxData] : '',
       data: idxData >= 0 ? l[idxData] : '',
       area: idxArea >= 0 ? l[idxArea] : '',
       nota: idxNota >= 0 ? parseInt(l[idxNota], 10) : null,
@@ -3044,16 +3044,28 @@ window.initSatisfacao = async function initSatisfacao(){
     };
   }).filter(function(r){ return r.comentario || r.area || r.nota; });
 
+  var sb = window.sb;
+  var lidasSet = {};
+  try{
+    var rLidas = await sb.from('satisfacao_lidas').select('id');
+    (rLidas.data || []).forEach(function(x){ lidasSet[x.id] = true; });
+  }catch(e){ /* segue sem marcação se der erro */ }
+
   var total = respostas.length;
   var comNota = respostas.filter(function(r){ return r.nota >= 1 && r.nota <= 5; });
   var media = comNota.length ? (comNota.reduce(function(a,r){ return a + r.nota; }, 0) / comNota.length) : null;
-  var hoje = parseCarimbo(hojeISO().split('-').reverse().join('/'));  var noMes = respostas.filter(function(r){
+  var hoje = parseCarimbo(hojeISO().split('-').reverse().join('/'));
+  var noMes = respostas.filter(function(r){
     var d = parseCarimbo(r.data);
     return d && hoje && d.mm === hoje.mm && d.yyyy === hoje.yyyy;
   }).length;
   var pedemRetorno = respostas.filter(function(r){ return r.retorno; }).length;
 
-  window.satisfacaoResumoAtual = { total: total, noMes: noMes, pedemRetorno: pedemRetorno, media: media };
+  function atualizarResumoGlobal(){
+    var naoLidas = respostas.filter(function(r){ return r.id && !lidasSet[r.id]; }).length;
+    window.satisfacaoResumoAtual = { total: total, noMes: noMes, pedemRetorno: pedemRetorno, media: media, naoLidas: naoLidas };
+  }
+  atualizarResumoGlobal();
 
   var porArea = {};
   respostas.forEach(function(r){
@@ -3062,43 +3074,68 @@ window.initSatisfacao = async function initSatisfacao(){
   });
   var areasOrdenadas = Object.keys(porArea).sort(function(a,b){ return porArea[b] - porArea[a]; });
 
-  var h = '';
-  h += '<div class="kpis">';
-  h += '<div class="kpi"><h4>Nota média</h4><div class="v">' + (media != null ? media.toFixed(1) : '—') + '</div></div>';
-  h += '<div class="kpi"><h4>Total de respostas</h4><div class="v">' + total + '</div></div>';
-  h += '<div class="kpi"><h4>Este mês</h4><div class="v">' + noMes + '</div></div>';
-  h += '<div class="kpi"><h4>Pedem retorno</h4><div class="v">' + pedemRetorno + '</div></div>';
-  h += '</div>';
-
-  if (areasOrdenadas.length){
-    h += '<div class="card"><h3>Por área</h3>';
-    areasOrdenadas.forEach(function(a){
-      h += '<div class="mod-item"><span class="txt">' + esc(a) + '</span><span class="mod-tag">' + porArea[a] + '</span></div>';
-    });
+  function render(){
+    var h = '';
+    h += '<div class="kpis">';
+    h += '<div class="kpi"><h4>Nota média</h4><div class="v">' + (media != null ? media.toFixed(1) : '—') + '</div></div>';
+    h += '<div class="kpi"><h4>Total de respostas</h4><div class="v">' + total + '</div></div>';
+    h += '<div class="kpi"><h4>Este mês</h4><div class="v">' + noMes + '</div></div>';
+    h += '<div class="kpi"><h4>Não lidas</h4><div class="v">' + window.satisfacaoResumoAtual.naoLidas + '</div></div>';
     h += '</div>';
-  }
 
-  h += '<div class="card"><h3>Últimos comentários</h3>';
-  var recentes = respostas.slice().reverse().slice(0, 20);
-  if (!recentes.length){
-    h += '<div class="mod-vazio">Nenhuma resposta ainda.</div>';
-  } else {
-    recentes.forEach(function(r){
-      h += '<div class="mod-reg"><div class="quando">' + esc(r.data || '—') + (r.area ? ' · ' + esc(r.area) : '') + (r.nota ? ' · nota ' + esc(r.nota) : '') + '</div>';
-      h += '<div class="texto">' + esc(r.comentario || '(sem mensagem)') + '</div>';
-      if (r.retorno && (r.nome || r.telefone)){
-        h += '<div class="mod-msg">pediu retorno: ' + esc([r.nome, r.telefone].filter(Boolean).join(' · ')) + '</div>';
-      } else if (r.retorno){
-        h += '<div class="mod-msg">pediu retorno (sem contato informado)</div>';
-      }
+    if (areasOrdenadas.length){
+      h += '<div class="card"><h3>Por área</h3>';
+      areasOrdenadas.forEach(function(a){
+        h += '<div class="mod-item"><span class="txt">' + esc(a) + '</span><span class="mod-tag">' + porArea[a] + '</span></div>';
+      });
       h += '</div>';
-    });
+    }
+
+    h += '<div class="card"><h3>Últimos comentários</h3>';
+    var recentes = respostas.slice().reverse().slice(0, 20);
+    if (!recentes.length){
+      h += '<div class="mod-vazio">Nenhuma resposta ainda.</div>';
+    } else {
+      recentes.forEach(function(r){
+        var lida = r.id && lidasSet[r.id];
+        h += '<div class="mod-reg' + (lida ? ' feito' : '') + '"><div class="quando">' + esc(r.data || '—') + (r.area ? ' · ' + esc(r.area) : '') + (r.nota ? ' · nota ' + esc(r.nota) : '') + '</div>';
+        h += '<div class="texto">' + esc(r.comentario || '(sem mensagem)') + '</div>';
+        if (r.retorno && (r.nome || r.telefone)){
+          h += '<div class="mod-msg">pediu retorno: ' + esc([r.nome, r.telefone].filter(Boolean).join(' · ')) + '</div>';
+        } else if (r.retorno){
+          h += '<div class="mod-msg">pediu retorno (sem contato informado)</div>';
+        }
+        if (r.id){
+          h += lida
+            ? '<button class="mod-mini" data-desmarcar="' + esc(r.id) + '">visto — desmarcar</button>'
+            : '<button class="mod-mini" data-marcar="' + esc(r.id) + '">dar ciência</button>';
+        }
+        h += '</div>';
+      });
+    }
+    h += '</div>';
+    box.innerHTML = h;
   }
-  h += '</div>';
-  box.innerHTML = h;
+  render();
+
+  box.addEventListener('click', async function(e){
+    var t = e.target;
+    var idMarcar = t.getAttribute && t.getAttribute('data-marcar');
+    var idDesmarcar = t.getAttribute && t.getAttribute('data-desmarcar');
+    if (idMarcar){
+      t.disabled = true;
+      var res = await sb.from('satisfacao_lidas').upsert({ id: idMarcar });
+      if (!res.error){ lidasSet[idMarcar] = true; atualizarResumoGlobal(); render(); }
+      else t.disabled = false;
+    } else if (idDesmarcar){
+      t.disabled = true;
+      var res2 = await sb.from('satisfacao_lidas').delete().eq('id', idDesmarcar);
+      if (!res2.error){ delete lidasSet[idDesmarcar]; atualizarResumoGlobal(); render(); }
+      else t.disabled = false;
+    }
+  });
 
   try{
-    var sb = window.sb;
     var atual = await sb.from('resumo_cache').select('dados').eq('id',1).single();
     var dados = (atual.data && atual.data.dados) || {};
     dados.satisfacao = { nota_media: media != null ? Math.round(media*10)/10 : null, total_respostas: total, respostas_mes: noMes, pedem_retorno: pedemRetorno };
