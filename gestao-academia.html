@@ -625,6 +625,22 @@ function buildDiaria(ym){
   };
 }
 
+window.atualizarResumoFinanceiro = async function(){
+  var sb = window.sb;
+  if (!sb) return;
+  try{
+    var ym = todayISOTop().slice(0,7);
+    var d = buildDiaria(ym);
+    var c = d.confronto;
+    var diferenca = c.saldo_final_apurado - c.online.total;
+    var atual = await sb.from('resumo_cache').select('dados').eq('id',1).single();
+    var dados = (atual.data && atual.data.dados) || {};
+    dados.financeiro_mes = { receita: c.apurado.total, despesas_compras: -(c.despesa + c.compras), saldo: c.saldo_final_apurado };
+    dados.conciliacao = { diferenca: Math.round(diferenca*100)/100, confere: Math.abs(diferenca) < 1 };
+    await sb.from('resumo_cache').update({ dados: dados, atualizado_em: new Date().toISOString() }).eq('id',1);
+  }catch(e){ /* resumo é best-effort */ }
+};
+
 var CATEGORIA_TO_GRUPO_TOP = {
   'Folha de pessoal': 'FOLHA DE PESSOAL',
   'Parceiros': 'PARCEIROS',
@@ -1269,7 +1285,7 @@ function dailyLedgerTable(tableId, entradaDaily, saidaDaily, extraRows) {
 document.getElementById('ref-mes').textContent = REF_MES;
 document.getElementById('ref-atualizacao').textContent = DATA_ATUALIZADA_EM;
 
-(function initSaldoOnline(){
+window.initSaldoOnline = async function initSaldoOnline(){
   var so = LANCAMENTOS.saldoOnline || EXTERNAL.confronto_online || {};
   var dEl = document.getElementById('saldo-online-dinheiro');
   var cEl = document.getElementById('saldo-online-c6');
@@ -1296,33 +1312,26 @@ document.getElementById('ref-atualizacao').textContent = DATA_ATUALIZADA_EM;
       });
     });
   }
-  btn.addEventListener('click', function(){
+  btn.addEventListener('click', async function(){
     btn.disabled = true;
     msgEl.textContent = 'Salvando…';
-    LANCAMENTOS.saldoOnline = {
+    var novoSaldo = {
       Dinheiro: displayToNumberTop(dEl.value),
       C6: displayToNumberTop(cEl.value),
       Infinity: displayToNumberTop(iEl.value)
     };
-    withTimeoutTop(claude.use('artifact').then(function(artifact){
-      if (!artifact) { msgEl.textContent = 'Não consegui salvar aqui.'; return; }
-      return artifact.publish(fullDocument()).then(function(){
-        msgEl.textContent = 'Salvo — atualizando…';
-      });
-    }), 20000, 'timeout').catch(function(err){
-      var code = err && err.code;
-      if (code === 'timeout') {
-        msgEl.textContent = 'Demorou demais para salvar. Confira sua conexão e tente novamente.';
-      } else if (code === 'conflict') {
-        msgEl.textContent = 'Alguém salvou ao mesmo tempo — atualizando a tela…';
-      } else {
-        msgEl.textContent = 'Erro ao salvar (' + (code || '?') + ').';
-      }
-    }).then(function(){
-      btn.disabled = false;
-    });
+    try{
+      var res = await window.sb.from('saldo_online').upsert({ id:1, dinheiro: novoSaldo.Dinheiro, c6: novoSaldo.C6, infinity: novoSaldo.Infinity });
+      if (res.error) throw res.error;
+      LANCAMENTOS.saldoOnline = novoSaldo;
+      msgEl.textContent = 'Salvo.';
+      if (window.atualizarResumoFinanceiro) window.atualizarResumoFinanceiro();
+    }catch(err){
+      msgEl.textContent = 'Não consegui salvar agora. Confira a internet e tente de novo.';
+    }
+    btn.disabled = false;
   });
-})();
+};
 
 (function initBackupExport(){
   var btn = document.getElementById('btn-exportar-backup');
@@ -1360,12 +1369,54 @@ function renderResize() {
 }
 
 
-(function(){
+window.initFinanceiro = async function initFinanceiro(){
   'use strict';
 
   var STATE = LANCAMENTOS;
   STATE.compras = STATE.compras || [];
   STATE.despesas = STATE.despesas || [];
+
+  await (async function carregarOuMigrarFinanceiro(){
+    var sb = window.sb;
+    var rSup = await sb.from('suplementos').select('*');
+    var rPla = await sb.from('planos').select('*');
+    var rCom = await sb.from('compras').select('*');
+    var rDes = await sb.from('despesas').select('*');
+    var vazio = !(rSup.data && rSup.data.length) && !(rPla.data && rPla.data.length)
+             && !(rCom.data && rCom.data.length) && !(rDes.data && rDes.data.length);
+
+    if (vazio){
+      // primeira vez: leva o que já está nesta página para o banco, uma única vez
+      if (STATE.suplementos && STATE.suplementos.length){
+        await sb.from('suplementos').insert(STATE.suplementos.map(function(e){ return mapEntryToRow('sup', e); }));
+      }
+      if (STATE.planos && STATE.planos.length){
+        await sb.from('planos').insert(STATE.planos.map(function(e){ return mapEntryToRow('plano', e); }));
+      }
+      if (STATE.compras && STATE.compras.length){
+        await sb.from('compras').insert(STATE.compras.map(function(e){ return mapEntryToRow('compra', e); }));
+      }
+      if (STATE.despesas && STATE.despesas.length){
+        await sb.from('despesas').insert(STATE.despesas.map(function(e){ return mapEntryToRow('despesa', e); }));
+      }
+      if (STATE.saldoOnline){
+        await sb.from('saldo_online').upsert({ id:1, dinheiro: STATE.saldoOnline.Dinheiro||0, c6: STATE.saldoOnline.C6||0, infinity: STATE.saldoOnline.Infinity||0 });
+      }
+      // os dados locais já são os certos — não precisa reler
+      return;
+    }
+
+    STATE.suplementos = (rSup.data||[]).map(rowToEntry('sup'));
+    STATE.planos = (rPla.data||[]).map(rowToEntry('plano'));
+    STATE.compras = (rCom.data||[]).map(rowToEntry('compra'));
+    STATE.despesas = (rDes.data||[]).map(rowToEntry('despesa'));
+    var rSaldo = await sb.from('saldo_online').select('*').eq('id',1).maybeSingle();
+    if (rSaldo.data){
+      STATE.saldoOnline = { Dinheiro: rSaldo.data.dinheiro, C6: rSaldo.data.c6, Infinity: rSaldo.data.infinity };
+    }
+    LANCAMENTOS = STATE;
+  })();
+
   var CATEGORIAS_DESPESA = ['Folha de pessoal','Parceiros','Sistemas','Serviços prestados','Bens duráveis','Material de expediente','Impostos e taxas','Fixas / consumo','Outros'];
   var activeTab = 'suplementos';
   var supForm = { data: todayISO() };              // currently selected date in the Suplementos form
@@ -1510,37 +1561,62 @@ function renderResize() {
     });
   }
 
-  function persist(newState, pendingEntry){
-    return withTimeout(claude.use('artifact').then(function(artifact){
-      if (!artifact) { showToast('Não consegui salvar aqui — capacidade indisponível nesta visualização.', true); return false; }
-      if (pendingEntry) { try { sessionStorage.setItem('pendingEntry', JSON.stringify(pendingEntry)); } catch(e){} }
-      STATE = newState;
-      LANCAMENTOS = newState;
-      return artifact.publish(fullDocument()).then(function(){
-        try { sessionStorage.removeItem('pendingEntry'); } catch(e){}
-        return true;
-      });
-    }), 20000, 'timeout').catch(function(err){
-      handlePublishError(err);
-      return false;
-    });
+  var KIND_TO_TABLE = {sup:'suplementos', plano:'planos', compra:'compras', despesa:'despesas'};
+
+  function mapEntryToRow(kind, e){
+    if (kind === 'sup') return { id:e.id, data:e.data, dinheiro:e.dinheiro, pix:e.pix, cartao:e.cartao, crediario:e.crediario, receb_parc_dinheiro:e.recebParcDinheiro, receb_parc_pix:e.recebParcPix, lancado_por:e.lancadoPor, criado_em:e.criadoEm };
+    if (kind === 'plano') return { id:e.id, data:e.data, periodo:e.periodo, dinheiro:e.dinheiro, credito:e.credito, debito:e.debito, pix_c6:e.pixC6, estornos:e.estornos, entrada_total_pass:e.entradaTotalPass, entrada_nextfit_pay:e.entradaNextfitPay, lancado_por:e.lancadoPor, criado_em:e.criadoEm };
+    if (kind === 'compra') return { id:e.id, data:e.data, quantidade:e.quantidade, descricao:e.descricao, valor:e.valor, lancado_por:e.lancadoPor, criado_em:e.criadoEm };
+    if (kind === 'despesa') return { id:e.id, data:e.data, categoria:e.categoria, descricao:e.descricao, valor:e.valor, lancado_por:e.lancadoPor, criado_em:e.criadoEm };
+    return e;
   }
 
-  function handlePublishError(err){
-    var code = err && err.code;
-    if (code === 'timeout') {
-      showToast('Demorou demais para salvar. Confira sua conexão e tente novamente.', true);
-    } else if (code === 'conflict') {
-      showToast('Alguém salvou um lançamento ao mesmo tempo. Atualizando a tela com a versão mais recente…', true);
-      // the view reloads automatically per platform behavior; nothing else to do
-    } else if (code === 'not_writer' || code === 'not_granted') {
-      showToast('Você está em modo somente leitura — não é possível salvar lançamentos por aqui.', true);
-    } else if (code === 'rate_limited') {
-      showToast('Muitos salvamentos seguidos — espere alguns segundos e tente de novo.', true);
-    } else {
-      showToast('Não consegui salvar agora (' + (code||'erro') + '). Tente novamente.', true);
+  function mapEntryToRow(kind, e){
+    if (kind === 'sup') return { id:e.id, data:e.data, dinheiro:e.dinheiro, pix:e.pix, cartao:e.cartao, crediario:e.crediario, receb_parc_dinheiro:e.recebParcDinheiro, receb_parc_pix:e.recebParcPix, lancado_por:e.lancadoPor, criado_em:e.criadoEm };
+    if (kind === 'plano') return { id:e.id, data:e.data, periodo:e.periodo, dinheiro:e.dinheiro, credito:e.credito, debito:e.debito, pix_c6:e.pixC6, estornos:e.estornos, entrada_total_pass:e.entradaTotalPass, entrada_nextfit_pay:e.entradaNextfitPay, lancado_por:e.lancadoPor, criado_em:e.criadoEm };
+    if (kind === 'compra') return { id:e.id, data:e.data, quantidade:e.quantidade, descricao:e.descricao, valor:e.valor, lancado_por:e.lancadoPor, criado_em:e.criadoEm };
+    if (kind === 'despesa') return { id:e.id, data:e.data, categoria:e.categoria, descricao:e.descricao, valor:e.valor, lancado_por:e.lancadoPor, criado_em:e.criadoEm };
+    return e;
+  }
+
+  function rowToEntry(kind){
+    return function(r){
+      if (kind === 'sup') return { id:r.id, data:r.data, dinheiro:r.dinheiro, pix:r.pix, cartao:r.cartao, crediario:r.crediario, recebParcDinheiro:r.receb_parc_dinheiro, recebParcPix:r.receb_parc_pix, lancadoPor:r.lancado_por, criadoEm:r.criado_em };
+      if (kind === 'plano') return { id:r.id, data:r.data, periodo:r.periodo, dinheiro:r.dinheiro, credito:r.credito, debito:r.debito, pixC6:r.pix_c6, estornos:r.estornos, entradaTotalPass:r.entrada_total_pass, entradaNextfitPay:r.entrada_nextfit_pay, lancadoPor:r.lancado_por, criadoEm:r.criado_em };
+      if (kind === 'compra') return { id:r.id, data:r.data, quantidade:r.quantidade, descricao:r.descricao, valor:r.valor, lancadoPor:r.lancado_por, criadoEm:r.criado_em };
+      if (kind === 'despesa') return { id:r.id, data:r.data, categoria:r.categoria, descricao:r.descricao, valor:r.valor, lancadoPor:r.lancado_por, criadoEm:r.criado_em };
+      return r;
+    };
+  }
+
+  async function persist(newState, pendingEntry){
+    var sb = window.sb;
+    try{
+      if (pendingEntry && pendingEntry.kind && KIND_TO_TABLE[pendingEntry.kind]){
+        var table = KIND_TO_TABLE[pendingEntry.kind];
+        var row = mapEntryToRow(pendingEntry.kind, pendingEntry.entry);
+        var res = await sb.from(table).upsert(row);
+        if (res.error) throw res.error;
+      } else if (pendingEntry && pendingEntry.kind && /-delete$/.test(pendingEntry.kind)){
+        var baseKind = pendingEntry.kind.replace('-delete','');
+        var table2 = KIND_TO_TABLE[baseKind];
+        var q = sb.from(table2).delete();
+        if (pendingEntry.id) q = q.eq('id', pendingEntry.id);
+        else if (pendingEntry.periodo != null) q = q.eq('data', pendingEntry.data).eq('periodo', pendingEntry.periodo);
+        else if (pendingEntry.data) q = q.eq('data', pendingEntry.data);
+        var res2 = await q;
+        if (res2.error) throw res2.error;
+      }
+      STATE = newState;
+      LANCAMENTOS = newState;
+      if (window.atualizarResumoFinanceiro) window.atualizarResumoFinanceiro();
+      return true;
+    }catch(err){
+      showToast('Não consegui salvar agora. Confira a internet e tente de novo.', true);
+      return false;
     }
   }
+
 
   var toastTimer = null;
   function showToast(msg, isError){
@@ -2102,7 +2178,7 @@ function renderResize() {
         var data = btn.getAttribute('data-del-sup');
         var newState = JSON.parse(JSON.stringify(STATE));
         newState.suplementos = newState.suplementos.filter(function(x){ return x.data !== data; });
-        persist(newState, null).then(function(ok){ if (ok) showToast('Lançamento excluído.', false); });
+        persist(newState, {kind:'sup-delete', data:data}).then(function(ok){ if (ok) showToast('Lançamento excluído.', false); });
       });
     });
     root.querySelectorAll('[data-edit-plano]').forEach(function(btn){
@@ -2117,7 +2193,7 @@ function renderResize() {
         var parts = btn.getAttribute('data-del-plano').split('|');
         var newState = JSON.parse(JSON.stringify(STATE));
         newState.planos = newState.planos.filter(function(x){ return !(x.data === parts[0] && x.periodo === parts[1]); });
-        persist(newState, null).then(function(ok){ if (ok) showToast('Lançamento excluído.', false); });
+        persist(newState, {kind:'plano-delete', data:parts[0], periodo:parts[1]}).then(function(ok){ if (ok) showToast('Lançamento excluído.', false); });
       });
     });
     root.querySelectorAll('[data-edit-compra]').forEach(function(btn){
@@ -2129,7 +2205,7 @@ function renderResize() {
         var id = btn.getAttribute('data-del-compra');
         var newState = JSON.parse(JSON.stringify(STATE));
         newState.compras = newState.compras.filter(function(x){ return x.id !== id; });
-        persist(newState, null).then(function(ok){ if (ok) showToast('Compra excluída.', false); });
+        persist(newState, {kind:'compra-delete', id:id}).then(function(ok){ if (ok) showToast('Compra excluída.', false); });
       });
     });
     root.querySelectorAll('[data-edit-despesa]').forEach(function(btn){
@@ -2141,7 +2217,7 @@ function renderResize() {
         var id = btn.getAttribute('data-del-despesa');
         var newState = JSON.parse(JSON.stringify(STATE));
         newState.despesas = newState.despesas.filter(function(x){ return x.id !== id; });
-        persist(newState, null).then(function(ok){ if (ok) showToast('Despesa excluída.', false); });
+        persist(newState, {kind:'despesa-delete', id:id}).then(function(ok){ if (ok) showToast('Despesa excluída.', false); });
       });
     });
   }
@@ -2176,7 +2252,7 @@ function renderResize() {
   }
 
   paint();
-})();
+};
 
 /* ==================== MÓDULOS: EQUIPE · CHECKLIST · VALIDADE ==================== */
 
@@ -2819,6 +2895,8 @@ window.initMenu = function initMenu(){
   async function bootApp(){
     mostrarApp();
     try{
+      await window.initFinanceiro();
+      await window.initSaldoOnline();
       await window.initModulos();
       if (window.initMenu) window.initMenu();
     }catch(e){
