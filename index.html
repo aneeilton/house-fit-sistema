@@ -1221,8 +1221,11 @@ window.renderContasPagar = function renderContasPagar() {
   const pct = cp.total.realizado / cp.total.planejado;
   kpiC.appendChild(kpiCard('Total planejado — ' + cp.mes, fmtBRL(cp.total.planejado)));
   kpiC.appendChild(kpiCard('Total realizado', fmtBRL(cp.total.realizado)));
-  kpiC.appendChild(kpiCard('Ainda a realizar', fmtBRL(cp.total.planejado - cp.total.realizado), null, true));
-  kpiC.appendChild(kpiCard('% realizado', (pct * 100).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%'));
+  const variacao = cp.total.planejado - cp.total.realizado;
+  const cardVariacao = document.createElement('div'); cardVariacao.className = 'kpi';
+  cardVariacao.innerHTML = `<div class="label">Variação</div><div class="value" style="color:${variacao >= 0 ? 'var(--good)' : 'var(--critical)'}">${fmtBRL(variacao)}</div>`;
+  kpiC.appendChild(cardVariacao);
+  kpiC.appendChild(kpiCard('% variação', (pct * 100).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%'));
 
   let rows = '';
   cp.grupos.forEach(g => {
@@ -1446,7 +1449,7 @@ window.initFinanceiro = async function initFinanceiro(){
   })();
 
   var CATEGORIAS_DESPESA = ['Folha de pessoal','Parceiros','Sistemas','Serviços prestados','Bens duráveis','Material de expediente','Impostos e taxas','Fixas / consumo','Outros'];
-  var activeTab = 'suplementos';
+  var activeTab = 'entradas';
   var supForm = { data: todayISO() };              // currently selected date in the Suplementos form
   var planoForm = { data: todayISO(), periodo: 'dia' }; // currently selected date+período in the Planos form
   var editingCompra = null;   // id of the compra being edited, or null
@@ -1637,6 +1640,7 @@ window.initFinanceiro = async function initFinanceiro(){
       }
       STATE = newState;
       LANCAMENTOS = newState;
+      paint();
       if (window.atualizarResumoFinanceiro) window.atualizarResumoFinanceiro();
       return true;
     }catch(err){
@@ -1660,21 +1664,29 @@ window.initFinanceiro = async function initFinanceiro(){
   // ---------- render ----------
   function renderBody(state){
     var html = '';
-    html += '<div class="hdr"><h1>Lançamento Diário — House Fit</h1><span class="sub">Suplementos e Planos</span></div>';
+    html += '<div class="hdr"><h1>Lançamento Diário — House Fit</h1><span class="sub">Entradas e Saídas</span></div>';
     html += '<div id="toast-area" style="display:none; margin-bottom:12px; font-size:13px; font-weight:600;"></div>';
     html += renderConflictBanner();
     html += '<div class="tabs">'
-      + '<button type="button" class="tabbtn' + (activeTab==='suplementos'?' active':'') + '" data-tab="suplementos">Suplementos</button>'
-      + '<button type="button" class="tabbtn' + (activeTab==='planos'?' active':'') + '" data-tab="planos">Planos</button>'
+      + '<button type="button" class="tabbtn' + (activeTab==='entradas'?' active':'') + '" data-tab="entradas">Entradas</button>'
+      + '<button type="button" class="tabbtn' + (activeTab==='saidas'?' active':'') + '" data-tab="saidas">Saídas</button>'
       + '</div>';
     html += renderMesSelector(state);
-    html += '<div class="tabview' + (activeTab==='suplementos'?' active':'') + '" id="view-suplementos">' + renderSuplementosTab(state) + '</div>';
-    html += '<div class="tabview' + (activeTab==='planos'?' active':'') + '" id="view-planos">' + renderPlanosTab(state) + '</div>';
+    html += '<div class="tabview' + (activeTab==='entradas'?' active':'') + '" id="view-entradas">' + renderEntradasTab(state) + '</div>';
+    html += '<div class="tabview' + (activeTab==='saidas'?' active':'') + '" id="view-saidas">' + renderSaidasTab(state) + '</div>';
     html += '<div class="tabs tabs-footer">'
-      + '<button type="button" class="tabbtn' + (activeTab==='suplementos'?' active':'') + '" data-tab="suplementos">Suplementos</button>'
-      + '<button type="button" class="tabbtn' + (activeTab==='planos'?' active':'') + '" data-tab="planos">Planos</button>'
+      + '<button type="button" class="tabbtn' + (activeTab==='entradas'?' active':'') + '" data-tab="entradas">Entradas</button>'
+      + '<button type="button" class="tabbtn' + (activeTab==='saidas'?' active':'') + '" data-tab="saidas">Saídas</button>'
       + '</div>';
     return html;
+  }
+
+  function renderEntradasTab(state){
+    return renderSuplementosTab(state) + renderPlanosTab(state);
+  }
+
+  function renderSaidasTab(state){
+    return renderComprasSection(state) + renderDespesasSection(state);
   }
 
   function renderMesSelector(state){
@@ -1767,8 +1779,6 @@ window.initFinanceiro = async function initFinanceiro(){
     }
     html += '</div>';
 
-    html += '<div class="section-divider">Saídas</div>';
-    html += renderComprasSection(state);
     return html;
   }
 
@@ -1907,8 +1917,6 @@ window.initFinanceiro = async function initFinanceiro(){
     }
     html += '</div>';
 
-    html += '<div class="section-divider">Saídas</div>';
-    html += renderDespesasSection(state);
     return html;
   }
 
@@ -2208,7 +2216,7 @@ window.initFinanceiro = async function initFinanceiro(){
 
     // ---- edit / delete from tables ----
     root.querySelectorAll('[data-edit-sup]').forEach(function(btn){
-      btn.addEventListener('click', function(){ supForm = {data: btn.getAttribute('data-edit-sup')}; activeTab='suplementos'; paint(); window.scrollTo(0,0); });
+      btn.addEventListener('click', function(){ supForm = {data: btn.getAttribute('data-edit-sup')}; activeTab='entradas'; paint(); window.scrollTo(0,0); });
     });
     root.querySelectorAll('[data-del-sup]').forEach(function(btn){
       btn.addEventListener('click', function(){
@@ -2222,7 +2230,7 @@ window.initFinanceiro = async function initFinanceiro(){
     root.querySelectorAll('[data-edit-plano]').forEach(function(btn){
       btn.addEventListener('click', function(){
         var parts = btn.getAttribute('data-edit-plano').split('|');
-        planoForm = {data: parts[0], periodo: parts[1]}; activeTab='planos'; paint(); window.scrollTo(0,0);
+        planoForm = {data: parts[0], periodo: parts[1]}; activeTab='entradas'; paint(); window.scrollTo(0,0);
       });
     });
     root.querySelectorAll('[data-del-plano]').forEach(function(btn){
@@ -2235,7 +2243,7 @@ window.initFinanceiro = async function initFinanceiro(){
       });
     });
     root.querySelectorAll('[data-edit-compra]').forEach(function(btn){
-      btn.addEventListener('click', function(){ editingCompra = btn.getAttribute('data-edit-compra'); activeTab='suplementos'; paint(); window.scrollTo(0,0); });
+      btn.addEventListener('click', function(){ editingCompra = btn.getAttribute('data-edit-compra'); activeTab='saidas'; paint(); window.scrollTo(0,0); });
     });
     root.querySelectorAll('[data-del-compra]').forEach(function(btn){
       btn.addEventListener('click', function(){
@@ -2247,7 +2255,7 @@ window.initFinanceiro = async function initFinanceiro(){
       });
     });
     root.querySelectorAll('[data-edit-despesa]').forEach(function(btn){
-      btn.addEventListener('click', function(){ editingDespesa = btn.getAttribute('data-edit-despesa'); activeTab='planos'; paint(); window.scrollTo(0,0); });
+      btn.addEventListener('click', function(){ editingDespesa = btn.getAttribute('data-edit-despesa'); activeTab='saidas'; paint(); window.scrollTo(0,0); });
     });
     root.querySelectorAll('[data-del-despesa]').forEach(function(btn){
       btn.addEventListener('click', function(){
