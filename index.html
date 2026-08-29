@@ -398,6 +398,7 @@
       <button class="tab" data-view="equipe">Equipe</button>
       <button class="tab" data-view="validade">Validade</button>
       <button class="tab" data-view="satisfacao">Satisfação</button>
+      <button class="tab" data-view="gerencial">Gerencial</button>
     </div>
 
     <!-- INICIO -->
@@ -481,6 +482,9 @@
 
     <!-- SATISFACAO -->
     <div class="view" id="view-satisfacao"><div id="mod-satisfacao"></div></div>
+
+    <!-- GERENCIAL -->
+    <div class="view" id="view-gerencial"><div id="mod-gerencial"></div></div>
 
     <div class="footnote" style="margin-top:18px">
       Fonte: planilha "Gestão Academia.xlsx" (Google Drive / notebook do usuário). Atualização automática diária pausada — dados alimentados manualmente pela aba Lançamento.
@@ -2948,6 +2952,7 @@ window.initMenu = function initMenu(){
       { v:'satisfacao', t:'Satisfação', d:'Comentários e pedidos de retorno',
         n: (window.satisfacaoResumoAtual ? (window.satisfacaoResumoAtual.naoLidas ? window.satisfacaoResumoAtual.naoLidas + (window.satisfacaoResumoAtual.naoLidas===1?' não lida':' não lidas') : 'em dia') : '—'),
         cls: (window.satisfacaoResumoAtual && window.satisfacaoResumoAtual.naoLidas) ? 'alerta' : 'ok' },
+      { v:'gerencial', t:'Gerencial', d:'Margem, saldo e divisão da sociedade', n:'', cls:'' },
       { v:'conciliacao', t:'Conciliação', d:'Confronto do online com o lançado', n: conc.txt, cls: conc.cls },
       { v:'contaspagar', t:'Contas a pagar', d:'Fixas, parceiros e impostos', n:'', cls:'' },
       { v:'anual', t:'Anual', d:'Resultado do ano e divisão por sócio', n:'', cls:'' }
@@ -3039,6 +3044,7 @@ window.initMenu = function initMenu(){
       if (window.renderAnual) window.renderAnual();
       await window.initModulos();
       await window.initSatisfacao();
+      await window.initGerencial();
       if (window.initMenu) window.initMenu();
     }catch(e){
       var av = document.getElementById('login-aviso');
@@ -3307,6 +3313,228 @@ window.initSatisfacao = async function initSatisfacao(){
     dados.satisfacao = { nota_media: media != null ? Math.round(media*10)/10 : null, total_respostas: total, respostas_mes: noMes, pedem_retorno: pedemRetorno };
     await sb.from('resumo_cache').update({ dados: dados, atualizado_em: new Date().toISOString() }).eq('id',1);
   }catch(e){ /* best-effort */ }
+};
+
+window.initGerencial = async function initGerencial(){
+  var box = document.getElementById('mod-gerencial');
+  if (!box) return;
+  var sb = window.sb;
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function hojeISO(){ var d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+  function mesAtual(){ return hojeISO().slice(0,7); }
+  function mesLabel(ym){
+    var meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    var p = ym.split('-');
+    return meses[parseInt(p[1],10)-1] + '/' + p[0];
+  }
+  function mesAnterior(ym){
+    var p = ym.split('-').map(Number);
+    var m = p[1]-1, y = p[0];
+    if (m < 1){ m = 12; y -= 1; }
+    return y + '-' + String(m).padStart(2,'0');
+  }
+  function n(v){ var x = parseFloat(v); return isNaN(x) ? 0 : x; }
+  function brl(v){
+    v = n(v);
+    var neg = v < 0, abs = Math.abs(v);
+    return (neg?'-':'') + 'R$ ' + abs.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function pct(v){ return v == null ? '—' : (v*100).toLocaleString('pt-BR',{maximumFractionDigits:1}) + '%'; }
+
+  var mesesDisponiveis = [];
+  for (var i = 0; i < 15; i++){
+    var d = new Date(); d.setMonth(d.getMonth() - i);
+    mesesDisponiveis.push(d.toISOString().slice(0,7));
+  }
+  var mesSel = mesAtual();
+  var dados = null;
+
+  var CAMPOS_NUM = [
+    'quantidade_produtos','crediario','cartao','dinheiro_pix','custo_venda','quebra_doacao',
+    'saldo_mes_passado','compras_mes','valor_custo_estoque','valor_venda_estoque','em_transito',
+    'fiado_a_vencer','fiado_vencido_mais60','fiado_vencido_menos60',
+    'musc_receita','musc_futuro','aulas_receita','aulas_futuro','atend_receita','atend_futuro',
+    'arecceb_receita','arecceb_futuro','totalpass_receita','totalpass_futuro','wellhub_receita','wellhub_futuro',
+    'despesas_pagas'
+  ];
+
+  function vazio(){
+    var o = {};
+    CAMPOS_NUM.forEach(function(c){ o[c] = 0; });
+    return o;
+  }
+
+  async function carregarMes(ym){
+    var r = await sb.from('gerencial_mensal').select('*').eq('mes', ym).maybeSingle();
+    if (r.data) return r.data;
+    // sem lançamento nesse mês: começa vazio, mas puxa o saldo final do mês anterior
+    var novo = vazio();
+    var rAnt = await sb.from('gerencial_mensal').select('*').eq('mes', mesAnterior(ym)).maybeSingle();
+    if (rAnt.data) novo.saldo_mes_passado = calc(rAnt.data).saldo_em_conta;
+    return novo;
+  }
+
+  function calc(d){
+    var soma = n(d.crediario) + n(d.cartao) + n(d.dinheiro_pix);
+    var margemComR = soma - n(d.custo_venda);
+    var margemComP = soma ? margemComR / soma : null;
+    var margemFinR = margemComR - n(d.quebra_doacao);
+    var margemFinP = soma ? margemFinR / soma : null;
+    var supRamon = margemFinR * 0.75, supAnai = margemFinR * 0.25;
+    var saldoConta = n(d.saldo_mes_passado) + soma - n(d.compras_mes) - supRamon - supAnai;
+    var totalCrediario = n(d.fiado_a_vencer) + n(d.fiado_vencido_mais60) + n(d.fiado_vencido_menos60);
+    var totalAtivosReceita = n(d.musc_receita)+n(d.aulas_receita)+n(d.atend_receita)+n(d.arecceb_receita)+n(d.totalpass_receita)+n(d.wellhub_receita);
+    var totalAtivosFuturo = n(d.musc_futuro)+n(d.aulas_futuro)+n(d.atend_futuro)+n(d.arecceb_futuro)+n(d.totalpass_futuro)+n(d.wellhub_futuro);
+    var receitasPlanos = totalAtivosReceita;
+    var saldoPlanos = receitasPlanos - n(d.despesas_pagas);
+    var planosRamon = saldoPlanos * 0.75, planosAnai = saldoPlanos * 0.25;
+    var geralRamon = planosRamon + supRamon, geralAnai = planosAnai + supAnai;
+    return {
+      soma: soma, margemComR: margemComR, margemComP: margemComP, margemFinR: margemFinR, margemFinP: margemFinP,
+      supRamon: supRamon, supAnai: supAnai, saldoConta: saldoConta, totalCrediario: totalCrediario,
+      totalAtivosReceita: totalAtivosReceita, totalAtivosFuturo: totalAtivosFuturo,
+      receitasPlanos: receitasPlanos, saldoPlanos: saldoPlanos, planosRamon: planosRamon, planosAnai: planosAnai,
+      geralRamon: geralRamon, geralAnai: geralAnai, saldo_em_conta: saldoConta
+    };
+  }
+
+  function campo(id, label, valor, opts){
+    opts = opts || {};
+    return '<div class="field"><label style="display:block;font-size:12px;color:var(--muted);margin:8px 0 4px">' + label + '</label>'
+      + '<input class="mod-campo" type="text" inputmode="decimal" id="' + id + '" value="' + (valor || valor===0 ? String(valor).replace('.',',') : '') + '" placeholder="0,00"></div>';
+  }
+
+  function render(){
+    var c = calc(dados);
+    var h = '';
+
+    h += '<div class="mod-bar"><span id="msg-gerencial" class="mod-msg"></span></div>';
+    h += '<div class="card"><div class="mod-linha"><label style="font-size:13px">Mês: </label>';
+    h += '<select class="mod-campo" id="ger-mes-sel" style="max-width:160px">';
+    mesesDisponiveis.forEach(function(ym){
+      h += '<option value="' + ym + '"' + (ym===mesSel?' selected':'') + '>' + mesLabel(ym) + '</option>';
+    });
+    h += '</select></div></div>';
+
+    h += '<div class="card"><h3>Suplementos — vendas do mês</h3>';
+    h += campo('ger-qtd', 'Quantidade em produtos', dados.quantidade_produtos);
+    h += campo('ger-crediario', 'Crediário', dados.crediario);
+    h += campo('ger-cartao', 'Cartão', dados.cartao);
+    h += campo('ger-dinpix', 'Dinheiro / PIX', dados.dinheiro_pix);
+    h += '<div class="mod-item"><span class="txt">Soma</span><span class="mod-tag ok">' + brl(c.soma) + '</span></div>';
+    h += campo('ger-custo', 'Custo venda', dados.custo_venda);
+    h += campo('ger-quebra', 'Quebra / Doação', dados.quebra_doacao);
+    h += '<div class="mod-item"><span class="txt">Margem comercial</span><span class="mod-tag">' + brl(c.margemComR) + ' · ' + pct(c.margemComP) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">Margem final</span><span class="mod-tag' + (c.margemFinR>=0?' ok':' grave') + '">' + brl(c.margemFinR) + ' · ' + pct(c.margemFinP) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">75% Ramon</span><span class="mod-tag">' + brl(c.supRamon) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">25% Anai</span><span class="mod-tag">' + brl(c.supAnai) + '</span></div>';
+    h += '</div>';
+
+    h += '<div class="card"><h3>Saldo Suplemento</h3>';
+    h += campo('ger-saldopass', 'Saldo mês passado (carregado do mês anterior — pode ajustar)', dados.saldo_mes_passado);
+    h += '<div class="mod-item"><span class="txt">Entrada desse mês</span><span class="mod-tag">' + brl(c.soma) + '</span></div>';
+    h += campo('ger-compras', 'Compras desse mês', dados.compras_mes);
+    h += '<div class="mod-item"><span class="txt">Participação Ramon / Anai</span><span class="mod-tag">' + brl(c.supRamon) + ' / ' + brl(c.supAnai) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt"><b>Saldo em conta</b></span><span class="mod-tag' + (c.saldoConta>=0?' ok':' grave') + '"><b>' + brl(c.saldoConta) + '</b></span></div>';
+    h += '</div>';
+
+    h += '<div class="card"><h3>Estoque</h3>';
+    h += campo('ger-vcusto', 'Valor de custo', dados.valor_custo_estoque);
+    h += campo('ger-vvenda', 'Valor de venda', dados.valor_venda_estoque);
+    h += campo('ger-transito', 'Em trânsito', dados.em_transito);
+    h += '</div>';
+
+    h += '<div class="card"><h3>Fiado</h3>';
+    h += campo('ger-avencer', 'A vencer', dados.fiado_a_vencer);
+    h += campo('ger-v60mais', 'Vencido + 60 dias', dados.fiado_vencido_mais60);
+    h += campo('ger-v60menos', 'Vencido - 60 dias', dados.fiado_vencido_menos60);
+    h += '<div class="mod-item"><span class="txt">Total crediário</span><span class="mod-tag">' + brl(c.totalCrediario) + '</span></div>';
+    h += '</div>';
+
+    h += '<div class="card"><h3>Planos — modalidades do mês</h3>';
+    h += '<div class="cardsub">Receita = já realizado. Futuro = a receber / projeção.</div>';
+    [['musc','Musculação'],['aulas','Aulas coletivas'],['atend','Atendimentos'],['arecceb','A receber cartão'],['totalpass','Total Pass'],['wellhub','Well Hub']].forEach(function(m){
+      h += '<div class="mod-linha">';
+      h += '<div style="flex:1;min-width:120px;font-size:13px;padding-top:22px">' + m[1] + '</div>';
+      h += campo('ger-' + m[0] + '-r', 'Receita', dados[m[0]+'_receita']);
+      h += campo('ger-' + m[0] + '-f', 'Futuro', dados[m[0]+'_futuro']);
+      h += '</div>';
+    });
+    h += '<div class="mod-item"><span class="txt"><b>Total Ativos</b></span><span class="mod-tag"><b>' + brl(c.totalAtivosReceita) + '</b> · futuro ' + brl(c.totalAtivosFuturo) + '</span></div>';
+    h += '</div>';
+
+    h += '<div class="card"><h3>Planos — financeiro</h3>';
+    h += '<div class="mod-item"><span class="txt">Receitas</span><span class="mod-tag">' + brl(c.receitasPlanos) + '</span></div>';
+    h += campo('ger-despesas', 'Despesas pagas', dados.despesas_pagas);
+    h += '<div class="mod-item"><span class="txt"><b>Saldo</b></span><span class="mod-tag' + (c.saldoPlanos>=0?' ok':' grave') + '"><b>' + brl(c.saldoPlanos) + '</b></span></div>';
+    h += '<div class="mod-item"><span class="txt">75% Ramon</span><span class="mod-tag">' + brl(c.planosRamon) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">25% Anai</span><span class="mod-tag">' + brl(c.planosAnai) + '</span></div>';
+    h += '</div>';
+
+    h += '<div class="card"><h3>Geral — divisão da sociedade</h3>';
+    h += '<div class="kpis">';
+    h += '<div class="kpi"><h4>75% Ramon</h4><div class="v">' + brl(c.geralRamon) + '</div></div>';
+    h += '<div class="kpi"><h4>25% Anai</h4><div class="v">' + brl(c.geralAnai) + '</div></div>';
+    h += '</div></div>';
+
+    h += '<div class="mod-linha" style="margin:14px 0 30px"><button class="btn-dash" id="ger-salvar">Salvar mês</button></div>';
+
+    box.innerHTML = h;
+
+    var sel = document.getElementById('ger-mes-sel');
+    if (sel) sel.addEventListener('change', async function(){
+      mesSel = sel.value;
+      dados = await carregarMes(mesSel);
+      render();
+    });
+
+    CAMPOS_NUM.forEach(function(c2){
+      var idMap = {
+        quantidade_produtos:'ger-qtd', crediario:'ger-crediario', cartao:'ger-cartao', dinheiro_pix:'ger-dinpix',
+        custo_venda:'ger-custo', quebra_doacao:'ger-quebra', saldo_mes_passado:'ger-saldopass', compras_mes:'ger-compras',
+        valor_custo_estoque:'ger-vcusto', valor_venda_estoque:'ger-vvenda', em_transito:'ger-transito',
+        fiado_a_vencer:'ger-avencer', fiado_vencido_mais60:'ger-v60mais', fiado_vencido_menos60:'ger-v60menos',
+        musc_receita:'ger-musc-r', musc_futuro:'ger-musc-f', aulas_receita:'ger-aulas-r', aulas_futuro:'ger-aulas-f',
+        atend_receita:'ger-atend-r', atend_futuro:'ger-atend-f', arecceb_receita:'ger-arecceb-r', arecceb_futuro:'ger-arecceb-f',
+        totalpass_receita:'ger-totalpass-r', totalpass_futuro:'ger-totalpass-f', wellhub_receita:'ger-wellhub-r', wellhub_futuro:'ger-wellhub-f',
+        despesas_pagas:'ger-despesas'
+      };
+      var el = document.getElementById(idMap[c2]);
+      if (el) el.addEventListener('change', function(){
+        dados[c2] = n(el.value.replace(',','.'));
+        render();
+      });
+    });
+
+    var btnSalvar = document.getElementById('ger-salvar');
+    if (btnSalvar) btnSalvar.addEventListener('click', async function(){
+      btnSalvar.disabled = true;
+      var msg = document.getElementById('msg-gerencial');
+      msg.textContent = 'Salvando…';
+      var linha = Object.assign({ mes: mesSel }, dados);
+      var res = await sb.from('gerencial_mensal').upsert(linha);
+      btnSalvar.disabled = false;
+      if (res.error){ msg.textContent = 'Não consegui salvar — tenta de novo.'; return; }
+      msg.textContent = 'Salvo.';
+      var calc2 = calc(dados);
+      try{
+        var atual = await sb.from('resumo_cache').select('dados').eq('id',1).single();
+        var rdados = (atual.data && atual.data.dados) || {};
+        rdados.gerencial = {
+          mes: mesSel,
+          saldo_suplemento: calc2.saldoConta,
+          saldo_planos: calc2.saldoPlanos,
+          geral_ramon: calc2.geralRamon,
+          geral_anai: calc2.geralAnai
+        };
+        await sb.from('resumo_cache').update({ dados: rdados, atualizado_em: new Date().toISOString() }).eq('id',1);
+      }catch(e){ /* best-effort */ }
+    });
+  }
+
+  dados = await carregarMes(mesSel);
+  render();
 };
 
 </script></body></html>

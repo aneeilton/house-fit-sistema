@@ -397,7 +397,8 @@
 
   function render(d, atualizadoEm){
     var f = d.financeiro_mes || {}, dl = d.divisao_lucros || {}, cc = d.conciliacao || {},
-        cp = d.contas_pagar || {}, ck = d.checklist || {}, eq = d.equipe || {}, val = d.validade || {};
+        cp = d.contas_pagar || {}, ck = d.checklist || {}, eq = d.equipe || {}, val = d.validade || {},
+        g = d.gerencial || {};
 
     document.getElementById('ra-atualizado').innerHTML =
       'Dados de: <b>' + esc(d.mes_ref || '—') + '</b> · Atualizado em: <b>' +
@@ -411,6 +412,22 @@
     h += '<div class="kpi"><div class="label">Despesas + compras</div><div class="value grande">' + brl(f.despesas_compras) + '</div></div>';
     h += '<div class="kpi"><div class="label">Saldo do mês</div><div class="value grande">' + brl(f.saldo) + '</div></div>';
     h += '</div>';
+
+    if (g.mes){
+      var MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      var mp = g.mes.split('-');
+      var mesGerLabel = MESES_PT[parseInt(mp[1],10)-1] + '/' + mp[0];
+      h += '<div class="resumo-secao">Resultado gerencial — ' + esc(mesGerLabel) + '</div>';
+      h += '<div class="cardsub" style="margin:-4px 0 10px">Lucro apurado por margem (custo, quebra e despesas do mês) — mais preciso que o fluxo de caixa acima.</div>';
+      h += '<div class="kpis">';
+      h += '<div class="kpi"><div class="label">Saldo Suplementos</div><div class="value grande">' + brl(g.saldo_suplemento) + '</div></div>';
+      h += '<div class="kpi"><div class="label">Saldo Planos</div><div class="value grande">' + brl(g.saldo_planos) + '</div></div>';
+      h += '</div>';
+      h += '<div class="divisao-grid">';
+      h += '<div class="kpi"><div class="label">Ramon · 75%</div><div class="value grande">' + brl(g.geral_ramon) + '</div></div>';
+      h += '<div class="kpi"><div class="label">Anai · 25%</div><div class="value grande">' + brl(g.geral_anai) + '</div></div>';
+      h += '</div>';
+    }
 
     h += '<div class="resumo-secao">Divisão de lucros — acumulado (' + esc(dl.periodo || '—') + ')</div>';
     h += '<div class="divisao-grid">';
