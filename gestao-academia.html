@@ -368,9 +368,9 @@
     <div class="sub">Entre com seu e-mail e senha para continuar.</div>
     <form id="login-form">
       <label for="login-email">E-mail</label>
-      <input type="email" id="login-email" autocomplete="username" required>
+      <input type="email" id="login-email" name="email" autocomplete="email" autocapitalize="off" spellcheck="false" required>
       <label for="login-senha">Senha</label>
-      <input type="password" id="login-senha" autocomplete="current-password" required>
+      <input type="password" id="login-senha" name="password" autocomplete="current-password" required>
       <button type="submit" id="login-btn">Entrar</button>
       <div class="aviso" id="login-aviso"></div>
     </form>
@@ -396,6 +396,7 @@
       <button class="tab" data-view="checklist">Checklist</button>
       <button class="tab" data-view="equipe">Equipe</button>
       <button class="tab" data-view="validade">Validade</button>
+      <button class="tab" data-view="satisfacao">Satisfação</button>
     </div>
 
     <!-- INICIO -->
@@ -476,6 +477,9 @@
 
     <!-- VALIDADE -->
     <div class="view" id="view-validade"><div id="mod-validade"></div></div>
+
+    <!-- SATISFACAO -->
+    <div class="view" id="view-satisfacao"><div id="mod-satisfacao"></div></div>
 
     <div class="footnote" style="margin-top:18px">
       Fonte: planilha "Gestão Academia.xlsx" (Google Drive / notebook do usuário). Atualização automática diária pausada — dados alimentados manualmente pela aba Lançamento.
@@ -2249,6 +2253,7 @@ window.initFinanceiro = async function initFinanceiro(){
   function paint(){
     document.getElementById('app').innerHTML = renderBody(STATE);
     attachHandlers();
+    if (window.initSaldoOnline) window.initSaldoOnline();
   }
 
   paint();
@@ -2812,6 +2817,7 @@ window.initMenu = function initMenu(){
         n: regsMes + (regsMes === 1 ? ' registro' : ' registros'), cls:'' },
       { v:'validade', t:'Validade', d:'Lotes por dias de venda restantes',
         n: vl.total ? vl.alerta + ' em alerta' : 'sem lotes', cls: vl.alerta ? 'alerta' : 'ok' },
+      { v:'satisfacao', t:'Satisfação', d:'Comentários e pedidos de retorno', n:'', cls:'' },
       { v:'conciliacao', t:'Conciliação', d:'Confronto do online com o lançado', n: conc.txt, cls: conc.cls },
       { v:'contaspagar', t:'Contas a pagar', d:'Fixas, parceiros e impostos', n:'', cls:'' },
       { v:'anual', t:'Anual', d:'Resultado do ano e divisão por sócio', n:'', cls:'' }
@@ -2898,6 +2904,7 @@ window.initMenu = function initMenu(){
       await window.initFinanceiro();
       await window.initSaldoOnline();
       await window.initModulos();
+      await window.initSatisfacao();
       if (window.initMenu) window.initMenu();
     }catch(e){
       var av = document.getElementById('login-aviso');
@@ -2943,5 +2950,154 @@ window.initMenu = function initMenu(){
     });
   }
 })();
+
+
+/* ==================== SATISFAÇÃO (planilha do Google Forms) ==================== */
+window.initSatisfacao = async function initSatisfacao(){
+  var box = document.getElementById('mod-satisfacao');
+  if (!box) return;
+
+  var SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR9hyOHfoSxWgCHlKnJP-eh88CdHfomtcHg5NRMqnAPJAMXc8gktY5Gvyjme1KNSow2XS-xRRsEYRDR/pub?gid=497118252&single=true&output=csv';
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function hojeISO(){ var d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+
+  function parseCSV(texto){
+    var linhas = [];
+    var linha = [], campo = '', dentro = false;
+    for (var i = 0; i < texto.length; i++){
+      var c = texto[i], prox = texto[i+1];
+      if (dentro){
+        if (c === '"' && prox === '"'){ campo += '"'; i++; }
+        else if (c === '"'){ dentro = false; }
+        else { campo += c; }
+      } else {
+        if (c === '"'){ dentro = true; }
+        else if (c === ','){ linha.push(campo); campo = ''; }
+        else if (c === '\r'){ /* ignora */ }
+        else if (c === '\n'){ linha.push(campo); linhas.push(linha); linha = []; campo = ''; }
+        else { campo += c; }
+      }
+    }
+    if (campo.length || linha.length){ linha.push(campo); linhas.push(linha); }
+    return linhas.filter(function(l){ return l.length > 1 || (l[0] || '').trim() !== ''; });
+  }
+
+  function acharColuna(cabecalho, pistas){
+    for (var i = 0; i < cabecalho.length; i++){
+      var h = cabecalho[i].toLowerCase();
+      for (var j = 0; j < pistas.length; j++){
+        if (h.indexOf(pistas[j]) !== -1) return i;
+      }
+    }
+    return -1;
+  }
+
+  // "28/08/2026 22:47:54" -> {mm:'08', yyyy:'2026'}
+  function parseCarimbo(str){
+    var m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(str || '');
+    if (!m) return null;
+    return { dd:m[1], mm:m[2], yyyy:m[3] };
+  }
+
+  function paintPendente(msg){
+    box.innerHTML = '<div class="card"><h3>Pesquisa de satisfação</h3><div class="mod-vazio">' + esc(msg) + '</div></div>';
+  }
+
+  if (!SHEET_CSV_URL){ paintPendente('Ainda não conectada a nenhuma planilha.'); return; }
+
+  var resp, texto;
+  try{
+    resp = await fetch(SHEET_CSV_URL);
+    if (!resp.ok) throw new Error('http ' + resp.status);
+    texto = await resp.text();
+  }catch(e){
+    paintPendente('Não consegui carregar a planilha agora. Confira a internet e tente de novo.');
+    return;
+  }
+
+  var linhas = parseCSV(texto);
+  if (!linhas.length){ paintPendente('A planilha ainda não tem respostas.'); return; }
+  var cabecalho = linhas[0];
+  var idxData = acharColuna(cabecalho, ['carimbo']);
+  var idxArea = acharColuna(cabecalho, ['área', 'area']);
+  var idxNota = acharColuna(cabecalho, ['nota']);
+  var idxComentario = acharColuna(cabecalho, ['mensagem', 'sugest', 'observa', 'coment']);
+  var idxRetorno = acharColuna(cabecalho, ['retorno']);
+  var idxNome = acharColuna(cabecalho, ['nome']);
+  var idxTelefone = acharColuna(cabecalho, ['telefone', 'whats']);
+
+  var respostas = linhas.slice(1).map(function(l){
+    return {
+      data: idxData >= 0 ? l[idxData] : '',
+      area: idxArea >= 0 ? l[idxArea] : '',
+      nota: idxNota >= 0 ? parseInt(l[idxNota], 10) : null,
+      comentario: idxComentario >= 0 ? l[idxComentario] : '',
+      retorno: idxRetorno >= 0 ? /sim/i.test(l[idxRetorno] || '') : false,
+      nome: idxNome >= 0 ? l[idxNome] : '',
+      telefone: idxTelefone >= 0 ? l[idxTelefone] : ''
+    };
+  }).filter(function(r){ return r.comentario || r.area || r.nota; });
+
+  var total = respostas.length;
+  var comNota = respostas.filter(function(r){ return r.nota >= 1 && r.nota <= 5; });
+  var media = comNota.length ? (comNota.reduce(function(a,r){ return a + r.nota; }, 0) / comNota.length) : null;
+  var hoje = parseCarimbo(hojeISO().split('-').reverse().join('/'));
+  var noMes = respostas.filter(function(r){
+    var d = parseCarimbo(r.data);
+    return d && hoje && d.mm === hoje.mm && d.yyyy === hoje.yyyy;
+  }).length;
+  var pedemRetorno = respostas.filter(function(r){ return r.retorno; }).length;
+
+  var porArea = {};
+  respostas.forEach(function(r){
+    var a = r.area || '(sem área)';
+    porArea[a] = (porArea[a] || 0) + 1;
+  });
+  var areasOrdenadas = Object.keys(porArea).sort(function(a,b){ return porArea[b] - porArea[a]; });
+
+  var h = '';
+  h += '<div class="kpis">';
+  h += '<div class="kpi"><h4>Nota média</h4><div class="v">' + (media != null ? media.toFixed(1) : '—') + '</div></div>';
+  h += '<div class="kpi"><h4>Total de respostas</h4><div class="v">' + total + '</div></div>';
+  h += '<div class="kpi"><h4>Este mês</h4><div class="v">' + noMes + '</div></div>';
+  h += '<div class="kpi"><h4>Pedem retorno</h4><div class="v">' + pedemRetorno + '</div></div>';
+  h += '</div>';
+
+  if (areasOrdenadas.length){
+    h += '<div class="card"><h3>Por área</h3>';
+    areasOrdenadas.forEach(function(a){
+      h += '<div class="mod-item"><span class="txt">' + esc(a) + '</span><span class="mod-tag">' + porArea[a] + '</span></div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<div class="card"><h3>Últimos comentários</h3>';
+  var recentes = respostas.slice().reverse().slice(0, 20);
+  if (!recentes.length){
+    h += '<div class="mod-vazio">Nenhuma resposta ainda.</div>';
+  } else {
+    recentes.forEach(function(r){
+      h += '<div class="mod-reg"><div class="quando">' + esc(r.data || '—') + (r.area ? ' · ' + esc(r.area) : '') + (r.nota ? ' · nota ' + esc(r.nota) : '') + '</div>';
+      h += '<div class="texto">' + esc(r.comentario || '(sem mensagem)') + '</div>';
+      if (r.retorno && (r.nome || r.telefone)){
+        h += '<div class="mod-msg">pediu retorno: ' + esc([r.nome, r.telefone].filter(Boolean).join(' · ')) + '</div>';
+      } else if (r.retorno){
+        h += '<div class="mod-msg">pediu retorno (sem contato informado)</div>';
+      }
+      h += '</div>';
+    });
+  }
+  h += '</div>';
+  box.innerHTML = h;
+
+  try{
+    var sb = window.sb;
+    var atual = await sb.from('resumo_cache').select('dados').eq('id',1).single();
+    var dados = (atual.data && atual.data.dados) || {};
+    dados.satisfacao = { nota_media: media != null ? Math.round(media*10)/10 : null, total_respostas: total, respostas_mes: noMes, pedem_retorno: pedemRetorno };
+    await sb.from('resumo_cache').update({ dados: dados, atualizado_em: new Date().toISOString() }).eq('id',1);
+  }catch(e){ /* best-effort */ }
+};
 
 </script></body></html>
