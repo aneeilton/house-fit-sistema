@@ -324,6 +324,12 @@
   .mod-tag { font-size:11px; padding:2px 7px; border-radius:6px; background:rgba(255,110,1,.14); color:#C2410C; margin-left:auto; flex:none; white-space:nowrap; }
   .mod-tag.ok { background:rgba(16,122,87,.14); color:#0F7A57; }
   .mod-tag.grave { background:rgba(190,32,32,.14); color:#BE2020; }
+  .mod-tag.alerta { background:rgba(250,178,25,.18); color:#B5790A; }
+  .kpi .v.ok { color: var(--good); }
+  .kpi .v.alerta { color: var(--warning); }
+  .kpi .v.grave { color: var(--critical); }
+  .card-clientes-bom { border-top: 4px solid var(--good); }
+  .card-clientes-atencao { border-top: 4px solid var(--warning); }
   .mod-reg { border-top:1px solid var(--line); padding:10px 0; }
   .mod-reg.feito { opacity:.5; }
   .mod-reg:first-child { border-top:0; }
@@ -3676,6 +3682,20 @@ window.initClientes = async function initClientes(){
     return MESES_PT[parseInt(mp[1],10)-1] + '/' + mp[0];
   }
 
+  // quanto MENOR o valor, pior — usado pra nota, % recomenda, % ajuda sem pedir
+  function corBaixoRuim(v, limiteAlerta, limiteGrave){
+    if (v == null) return '';
+    if (v < limiteGrave) return 'grave';
+    if (v < limiteAlerta) return 'alerta';
+    return 'ok';
+  }
+  // quanto MAIOR o valor, pior — usado nos temas gerais (frequência de menção)
+  function corAltoRuim(v, limiteAlerta, limiteGrave){
+    if (v >= limiteGrave) return 'grave';
+    if (v >= limiteAlerta) return 'alerta';
+    return '';
+  }
+
   function render(){
     var h = '';
     h += '<div class="mod-bar"><span id="msg-clientes" class="mod-msg"></span></div>';
@@ -3696,14 +3716,18 @@ window.initClientes = async function initClientes(){
     });
     h += '</select></div></div>';
 
+    var corNota = corBaixoRuim(row.nota_media, 4.0, 3.5);
+    var corRec = corBaixoRuim(row.pct_recomenda, 70, 50);
+    var corAjuda = corBaixoRuim(row.pct_oferece_ajuda, 70, 50);
+
     h += '<div class="kpis">';
     h += '<div class="kpi"><h4>Respostas</h4><div class="v">' + (row.total_respostas||0) + '</div></div>';
-    h += '<div class="kpi"><h4>Nota média</h4><div class="v">' + (row.nota_media!=null?Number(row.nota_media).toFixed(2):'—') + '</div></div>';
-    h += '<div class="kpi"><h4>Recomendaria</h4><div class="v">' + pctFmt(row.pct_recomenda) + '</div></div>';
-    h += '<div class="kpi"><h4>Ajuda sem pedir</h4><div class="v">' + pctFmt(row.pct_oferece_ajuda) + '</div></div>';
+    h += '<div class="kpi"><h4>Nota média</h4><div class="v ' + corNota + '">' + (row.nota_media!=null?Number(row.nota_media).toFixed(2):'—') + '</div></div>';
+    h += '<div class="kpi"><h4>Recomendaria</h4><div class="v ' + corRec + '">' + pctFmt(row.pct_recomenda) + '</div></div>';
+    h += '<div class="kpi"><h4>Ajuda sem pedir</h4><div class="v ' + corAjuda + '">' + pctFmt(row.pct_oferece_ajuda) + '</div></div>';
     h += '</div>';
 
-    h += '<div class="card"><h3>Elogios — pontos fortes para reconhecer</h3>';
+    h += '<div class="card card-clientes-bom"><h3>Elogios — pontos fortes para reconhecer</h3>';
     var elogios = d.elogios || [];
     if (!elogios.length){ h += '<div class="mod-vazio">Nenhum elogio nominal neste mês.</div>'; }
     elogios.forEach(function(e){
@@ -3712,21 +3736,23 @@ window.initClientes = async function initClientes(){
     });
     h += '</div>';
 
-    h += '<div class="card"><h3>Oportunidades — para conversar individualmente</h3>';
+    h += '<div class="card card-clientes-atencao"><h3>Oportunidades — para conversar individualmente</h3>';
     var oport = d.oportunidades || [];
     if (!oport.length){ h += '<div class="mod-vazio">Nenhuma reclamação nominal neste mês.</div>'; }
     oport.forEach(function(o){
+      var corO = corAltoRuim(o.mencoes, 2, 4);
       h += '<div class="mod-item" style="align-items:flex-start"><span class="txt"><b>' + esc(o.pessoa) + '</b><br><span class="mod-msg">' + esc(o.resumo) + '</span></span>';
-      h += '<span class="mod-tag">' + o.mencoes + (o.mencoes===1?' menção':' menções') + '</span></div>';
+      h += '<span class="mod-tag' + (corO?' '+corO:' alerta') + '">' + o.mencoes + (o.mencoes===1?' menção':' menções') + '</span></div>';
     });
     h += '</div>';
 
     h += '<div class="card"><h3>Temas gerais</h3>';
-    h += '<div class="cardsub">Padrões que aparecem em várias respostas, não ligados a uma pessoa só.</div>';
-    var temas = d.temas || [];
+    h += '<div class="cardsub">Padrões que aparecem em várias respostas, não ligados a uma pessoa só. Quanto mais vezes aparece, mais urgente.</div>';
+    var temas = (d.temas || []).slice().sort(function(a,b){ return b.mencoes - a.mencoes; });
     temas.forEach(function(t){
+      var corT = corAltoRuim(t.mencoes, 3, 6);
       h += '<div class="mod-item" style="align-items:flex-start"><span class="txt"><b>' + esc(t.tema) + '</b><br><span class="mod-msg">' + esc(t.resumo) + '</span></span>';
-      h += '<span class="mod-tag">' + t.mencoes + '×</span></div>';
+      h += '<span class="mod-tag' + (corT?' '+corT:'') + '">' + t.mencoes + '×</span></div>';
     });
     h += '</div>';
 
