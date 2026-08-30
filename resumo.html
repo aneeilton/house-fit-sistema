@@ -385,7 +385,7 @@
   .saldo-giro-nota { font-size:11.5px; color:var(--muted); margin-top:4px; text-transform:lowercase; }
   .card-suplementos { border-top:4px solid #2E6F9E; }
   .card-planos { border-top:4px solid #0C0C0C; }
-  .linha-link { cursor:pointer; }
+  .linha-link { cursor:pointer; text-decoration:none; color:inherit; }
   .linha-link:active .lbl { color:#FF6E01; }
   .linha-link .lbl::after { content:' ›'; color:var(--muted); }
   .detalhe-oculto { display:none; }
@@ -468,23 +468,11 @@
       h += '<div class="setor-sub" style="margin-top:18px">Caixa do setor — o que sobra para pagar as compras do mês seguinte.</div>';
       h += '<div class="linha-dado"><span class="lbl">Saldo mês passado</span><span class="val">' + brl(gs.saldo_mes_passado) + '</span></div>';
       h += '<div class="linha-dado"><span class="lbl">Entrada real no caixa</span><span class="val">' + brl(gs.entrada_real) + '</span></div>';
-      h += '<div class="linha-dado linha-link" data-toggle="detalhe-compras"><span class="lbl">Compras do mês</span><span class="val">' + saida(gs.compras_mes) + '</span></div>';
+      h += '<a class="linha-dado linha-link" href="resumo-compras.html"><span class="lbl">Compras do mês</span><span class="val">' + saida(gs.compras_mes) + '</span></a>';
       h += '<div class="linha-dado"><span class="lbl">Ramon · 75%</span><span class="val">' + brl(gs.participacao_ramon) + '</span></div>';
       h += '<div class="linha-dado"><span class="lbl">Anai · 25%</span><span class="val">' + brl(gs.participacao_anai) + '</span></div>';
       h += '<div class="linha-final"><span class="lbl">Saldo em conta</span><span class="val ' + ((gs.saldo_em_conta||0)>=0?'pos':'neg') + '">' + brl(gs.saldo_em_conta) + '</span></div>';
       h += '<div class="saldo-giro-nota">esse é o saldo de capital de giro que fica em caixa para renovação de estoque</div>';
-      h += '</div>';
-
-      // ---------- DETALHE: COMPRAS DO MÊS ----------
-      var comprasLista = d.compras_mes_lista || [];
-      h += '<div class="card detalhe-oculto" id="detalhe-compras"><div class="setor-titulo" style="font-size:16px">Compras do mês</div>';
-      if (!comprasLista.length){
-        h += '<div class="setor-sub">Nenhuma compra lançada neste mês ainda.</div>';
-      } else {
-        comprasLista.forEach(function(c){
-          h += '<div class="linha-dado"><span class="lbl">' + esc(c.data ? c.data.split('-').reverse().join('/') : '—') + ' — ' + esc(c.descricao||'') + '</span><span class="val">' + brl(c.valor) + '</span></div>';
-        });
-      }
       h += '</div>';
 
       // ---------- SETOR PLANOS ----------
@@ -495,25 +483,11 @@
       });
       h += '<tr class="total"><td>Total</td><td class="num">' + brl(gp.total_receita) + '</td></tr>';
       h += '</tbody></table>';
-      h += '<div class="linha-dado linha-link" style="margin-top:6px" data-toggle="detalhe-despesas"><span class="lbl">Despesas pagas</span><span class="val">' + saida(gp.despesas_pagas) + '</span></div>';
+      h += '<a class="linha-dado linha-link" style="margin-top:6px" href="resumo-despesas.html"><span class="lbl">Despesas pagas</span><span class="val">' + saida(gp.despesas_pagas) + '</span></a>';
       h += '<div class="linha-final"><span class="lbl">Lucro final Planos</span><span class="val ' + ((gp.saldo||0)>=0?'pos':'neg') + '">' + brl(gp.saldo) + '</span></div>';
       h += '</div>';
 
-      // ---------- DETALHE: CONTAS A PAGAR ----------
-      var cpDet = d.contas_pagar_detalhe || [];
-      h += '<div class="card detalhe-oculto" id="detalhe-despesas"><div class="setor-titulo" style="font-size:16px">Contas a Pagar — detalhe</div>';
-      h += '<div class="setor-sub">Espelho da aba Contas a Pagar do sistema.</div>';
-      if (!cpDet.length){
-        h += '<div class="setor-sub">Sem dados ainda.</div>';
-      } else {
-        cpDet.forEach(function(gr){
-          h += '<div class="linha-dado" style="border-top:2px solid var(--line);padding-top:12px"><span class="lbl" style="font-weight:700;text-transform:none">' + esc(gr.nome) + '</span><span class="val">' + brl(gr.planejado) + ' plan. / ' + brl(gr.realizado) + ' real.</span></div>';
-          (gr.itens||[]).forEach(function(it){
-            h += '<div class="linha-dado" style="padding-left:10px"><span class="lbl">' + esc(it.nome) + '</span><span class="val">' + brl(it.planejado) + ' / ' + brl(it.realizado) + '</span></div>';
-          });
-        });
-      }
-      h += '</div>';
+      // ---------- SETOR PLANOS: fim ----------
 
       // ---------- DASHBOARD COMPARATIVO ----------
       var lucroSup = gs.margem_final_rs || 0, lucroPla = gp.saldo || 0;
@@ -567,13 +541,6 @@
 
     document.getElementById('ra-conteudo').innerHTML = h;
   }
-
-  document.getElementById('ra-conteudo').addEventListener('click', function(e){
-    var el = e.target.closest ? e.target.closest('[data-toggle]') : null;
-    if (!el) return;
-    var alvo = document.getElementById(el.getAttribute('data-toggle'));
-    if (alvo){ alvo.classList.toggle('detalhe-oculto'); if (!alvo.classList.contains('detalhe-oculto')) alvo.scrollIntoView({behavior:'smooth', block:'start'}); }
-  });
 
   fetch(SUPABASE_URL + '/rest/v1/resumo_cache?select=dados,atualizado_em&id=eq.1', {
     headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }
