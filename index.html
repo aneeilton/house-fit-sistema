@@ -3375,6 +3375,12 @@ window.initGerencial = async function initGerencial(){
     return novo;
   }
 
+  function entradaRealSuplementos(ym){
+    var lista = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.suplementos) ? LANCAMENTOS.suplementos : [];
+    return lista.filter(function(x){ return String(x.data||'').slice(0,7) === ym; })
+      .reduce(function(t,x){ return t + n(x.dinheiro) + n(x.pix) + n(x.cartao) + n(x.recebParcDinheiro) + n(x.recebParcPix); }, 0);
+  }
+
   function calc(d){
     var soma = n(d.crediario) + n(d.cartao) + n(d.dinheiro_pix);
     var margemComR = soma - n(d.custo_venda);
@@ -3382,7 +3388,8 @@ window.initGerencial = async function initGerencial(){
     var margemFinR = margemComR - n(d.quebra_doacao);
     var margemFinP = soma ? margemFinR / soma : null;
     var supRamon = margemFinR * 0.75, supAnai = margemFinR * 0.25;
-    var saldoConta = n(d.saldo_mes_passado) + soma - n(d.compras_mes) - supRamon - supAnai;
+    var entradaReal = entradaRealSuplementos(mesSel);
+    var saldoConta = n(d.saldo_mes_passado) + entradaReal - n(d.compras_mes) - supRamon - supAnai;
     var totalCrediario = n(d.fiado_a_vencer) + n(d.fiado_vencido_mais60) + n(d.fiado_vencido_menos60);
     var totalAtivosReceita = n(d.musc_receita)+n(d.aulas_receita)+n(d.atend_receita)+n(d.arecceb_receita)+n(d.totalpass_receita)+n(d.wellhub_receita);
     var totalAtivosFuturo = n(d.musc_futuro)+n(d.aulas_futuro)+n(d.atend_futuro)+n(d.arecceb_futuro)+n(d.totalpass_futuro)+n(d.wellhub_futuro);
@@ -3392,7 +3399,7 @@ window.initGerencial = async function initGerencial(){
     var geralRamon = planosRamon + supRamon, geralAnai = planosAnai + supAnai;
     return {
       soma: soma, margemComR: margemComR, margemComP: margemComP, margemFinR: margemFinR, margemFinP: margemFinP,
-      supRamon: supRamon, supAnai: supAnai, saldoConta: saldoConta, totalCrediario: totalCrediario,
+      supRamon: supRamon, supAnai: supAnai, entradaReal: entradaReal, saldoConta: saldoConta, totalCrediario: totalCrediario,
       totalAtivosReceita: totalAtivosReceita, totalAtivosFuturo: totalAtivosFuturo,
       receitasPlanos: receitasPlanos, saldoPlanos: saldoPlanos, planosRamon: planosRamon, planosAnai: planosAnai,
       geralRamon: geralRamon, geralAnai: geralAnai, saldo_em_conta: saldoConta
@@ -3432,8 +3439,9 @@ window.initGerencial = async function initGerencial(){
     h += '</div>';
 
     h += '<div class="card"><h3>Saldo Suplemento</h3>';
+    h += '<div class="cardsub">A partir daqui é caixa, não venda — a entrada é o que foi realmente recebido no Lançamento diário, inclusive parcelas de meses anteriores.</div>';
     h += campo('ger-saldopass', 'Saldo mês passado (carregado do mês anterior — pode ajustar)', dados.saldo_mes_passado);
-    h += '<div class="mod-item"><span class="txt">Entrada desse mês</span><span class="mod-tag">' + brl(c.soma) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">Entrada desse mês (caixa real)</span><span class="mod-tag">' + brl(c.entradaReal) + '</span></div>';
     h += campo('ger-compras', 'Compras desse mês', dados.compras_mes);
     h += '<div class="mod-item"><span class="txt">Participação Ramon / Anai</span><span class="mod-tag">' + brl(c.supRamon) + ' / ' + brl(c.supAnai) + '</span></div>';
     h += '<div class="mod-item"><span class="txt"><b>Saldo em conta</b></span><span class="mod-tag' + (c.saldoConta>=0?' ok':' grave') + '"><b>' + brl(c.saldoConta) + '</b></span></div>';
