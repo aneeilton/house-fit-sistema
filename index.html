@@ -652,6 +652,19 @@ window.atualizarResumoFinanceiro = async function(){
     dados.conciliacao = { diferenca: Math.round(diferenca*100)/100, confere: Math.abs(diferenca) < 1 };
     if (typeof DATA !== 'undefined' && DATA.contas_pagar){
       dados.contas_pagar = { planejado: DATA.contas_pagar.total.planejado, realizado: DATA.contas_pagar.total.realizado };
+      dados.contas_pagar_detalhe = DATA.contas_pagar.grupos.map(function(gr){
+        return {
+          nome: gr.nome, planejado: gr.planejado, realizado: gr.realizado,
+          itens: (gr.itens||[]).map(function(it){ return { nome: it.nome, planejado: it.planejado, realizado: it.realizado }; })
+        };
+      });
+    }
+    dados.compras_mes_lista = (LANCAMENTOS.compras||[])
+      .filter(function(x){ return String(x.data||'').slice(0,7) === ym; })
+      .map(function(x){ return { data: x.data, descricao: x.descricao, valor: x.valor }; })
+      .sort(function(a,b){ return String(a.data).localeCompare(String(b.data)); });
+    if (typeof DATA !== 'undefined' && DATA.anual_socios){
+      dados.anual_mensal = { meses: DATA.anual_socios.meses, totalRamon: DATA.anual_socios.totalRamon, totalAnai: DATA.anual_socios.totalAnai };
     }
     await sb.from('resumo_cache').update({ dados: dados, atualizado_em: new Date().toISOString() }).eq('id',1);
   }catch(e){ /* resumo é best-effort */ }
@@ -3558,6 +3571,17 @@ window.initGerencial = async function initGerencial(){
             despesas_pagas: n(dados.despesas_pagas),
             saldo: calc2.saldoPlanos,
             ramon: calc2.planosRamon, anai: calc2.planosAnai
+          },
+          estoque: {
+            valor_custo: n(dados.valor_custo_estoque),
+            valor_venda: n(dados.valor_venda_estoque),
+            em_transito: n(dados.em_transito)
+          },
+          fiado: {
+            a_vencer: n(dados.fiado_a_vencer),
+            vencido_mais60: n(dados.fiado_vencido_mais60),
+            vencido_menos60: n(dados.fiado_vencido_menos60),
+            total: calc2.totalCrediario
           },
           geral_ramon: calc2.geralRamon,
           geral_anai: calc2.geralAnai
