@@ -3528,7 +3528,8 @@ window.initGerencial = async function initGerencial(){
       var calc2 = calc(dados);
       try{
         var atual = await sb.from('resumo_cache').select('dados').eq('id',1).single();
-        var rdados = (atual.data && atual.data.dados) || {};
+        if (atual.error) throw new Error('não consegui ler o resumo atual: ' + atual.error.message);
+        var rdados = atual.data.dados || {};
         rdados.gerencial = {
           mes: mesSel,
           suplementos: {
@@ -3561,8 +3562,12 @@ window.initGerencial = async function initGerencial(){
           geral_ramon: calc2.geralRamon,
           geral_anai: calc2.geralAnai
         };
-        await sb.from('resumo_cache').update({ dados: rdados, atualizado_em: new Date().toISOString() }).eq('id',1);
-      }catch(e){ /* best-effort */ }
+        var resR = await sb.from('resumo_cache').update({ dados: rdados, atualizado_em: new Date().toISOString() }).eq('id',1);
+        if (resR.error){ msg.textContent = 'Mês salvo, mas o resumo não atualizou: ' + resR.error.message; }
+        else { msg.textContent = 'Salvo — resumo atualizado.'; }
+      }catch(e){
+        msg.textContent = 'Mês salvo, mas o resumo não atualizou (' + (e && e.message ? e.message : 'erro desconhecido') + ').';
+      }
     });
   }
 
