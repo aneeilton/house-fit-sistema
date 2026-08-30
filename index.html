@@ -399,6 +399,7 @@
       <button class="tab" data-view="validade">Validade</button>
       <button class="tab" data-view="satisfacao">Satisfação</button>
       <button class="tab" data-view="gerencial">Gerencial</button>
+      <button class="tab" data-view="clientes">Clientes</button>
     </div>
 
     <!-- INICIO -->
@@ -485,6 +486,9 @@
 
     <!-- GERENCIAL -->
     <div class="view" id="view-gerencial"><div id="mod-gerencial"></div></div>
+
+    <!-- CLIENTES -->
+    <div class="view" id="view-clientes"><div id="mod-clientes"></div></div>
 
     <div class="footnote" style="margin-top:18px">
       Fonte: planilha "Gestão Academia.xlsx" (Google Drive / notebook do usuário). Atualização automática diária pausada — dados alimentados manualmente pela aba Lançamento.
@@ -2966,6 +2970,7 @@ window.initMenu = function initMenu(){
         n: (window.satisfacaoResumoAtual ? (window.satisfacaoResumoAtual.naoLidas ? window.satisfacaoResumoAtual.naoLidas + (window.satisfacaoResumoAtual.naoLidas===1?' não lida':' não lidas') : 'em dia') : '—'),
         cls: (window.satisfacaoResumoAtual && window.satisfacaoResumoAtual.naoLidas) ? 'alerta' : 'ok' },
       { v:'gerencial', t:'Gerencial', d:'Margem, saldo e divisão da sociedade', n:'', cls:'' },
+      { v:'clientes', t:'Clientes', d:'Elogios e reclamações da pesquisa de atendimento', n:'', cls:'' },
       { v:'conciliacao', t:'Conciliação', d:'Confronto do online com o lançado', n: conc.txt, cls: conc.cls },
       { v:'contaspagar', t:'Contas a pagar', d:'Fixas, parceiros e impostos', n:'', cls:'' },
       { v:'anual', t:'Anual', d:'Resultado do ano e divisão por sócio', n:'', cls:'' }
@@ -3059,6 +3064,7 @@ window.initMenu = function initMenu(){
       await window.initModulos();
       await window.initSatisfacao();
       await window.initGerencial();
+      await window.initClientes();
       if (window.initMenu) window.initMenu();
     }catch(e){
       var av = document.getElementById('login-aviso');
@@ -3631,6 +3637,89 @@ window.initGerencial = async function initGerencial(){
       }
     }catch(e){ /* best-effort */ }
   }
+};
+
+window.initClientes = async function initClientes(){
+  var box = document.getElementById('mod-clientes');
+  if (!box) return;
+  var sb = window.sb;
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function pctFmt(v){ return v == null ? '—' : (Number(v)).toLocaleString('pt-BR',{maximumFractionDigits:0}) + '%'; }
+
+  var rAll = await sb.from('clientes_mensal').select('*').order('mes', { ascending:false });
+  var linhas = rAll.data || [];
+  var mesSel = linhas.length ? linhas[0].mes : null;
+
+  function mesLabel(ym){
+    var MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    var mp = ym.split('-');
+    return MESES_PT[parseInt(mp[1],10)-1] + '/' + mp[0];
+  }
+
+  function render(){
+    var h = '';
+    h += '<div class="mod-bar"><span id="msg-clientes" class="mod-msg"></span></div>';
+
+    if (!linhas.length){
+      h += '<div class="card"><h3>Clientes</h3><div class="mod-vazio">Nenhuma pesquisa de atendimento analisada ainda. Exporte o CSV do formulário e envie no chat para eu processar o mês.</div></div>';
+      box.innerHTML = h;
+      return;
+    }
+
+    var row = linhas.filter(function(r){ return r.mes === mesSel; })[0] || linhas[0];
+    var d = row.dados || {};
+
+    h += '<div class="card"><div class="mod-linha"><label style="font-size:13px">Mês: </label>';
+    h += '<select class="mod-campo" id="cli-mes-sel" style="max-width:160px">';
+    linhas.forEach(function(r){
+      h += '<option value="' + r.mes + '"' + (r.mes===mesSel?' selected':'') + '>' + mesLabel(r.mes) + '</option>';
+    });
+    h += '</select></div></div>';
+
+    h += '<div class="kpis">';
+    h += '<div class="kpi"><h4>Respostas</h4><div class="v">' + (row.total_respostas||0) + '</div></div>';
+    h += '<div class="kpi"><h4>Nota média</h4><div class="v">' + (row.nota_media!=null?Number(row.nota_media).toFixed(2):'—') + '</div></div>';
+    h += '<div class="kpi"><h4>Recomendaria</h4><div class="v">' + pctFmt(row.pct_recomenda) + '</div></div>';
+    h += '<div class="kpi"><h4>Ajuda sem pedir</h4><div class="v">' + pctFmt(row.pct_oferece_ajuda) + '</div></div>';
+    h += '</div>';
+
+    h += '<div class="card"><h3>Elogios — pontos fortes para reconhecer</h3>';
+    var elogios = d.elogios || [];
+    if (!elogios.length){ h += '<div class="mod-vazio">Nenhum elogio nominal neste mês.</div>'; }
+    elogios.forEach(function(e){
+      h += '<div class="mod-item" style="align-items:flex-start"><span class="txt"><b>' + esc(e.pessoa) + '</b><br><span class="mod-msg">' + esc(e.resumo) + '</span></span>';
+      h += '<span class="mod-tag ok">' + e.mencoes + (e.mencoes===1?' menção':' menções') + '</span></div>';
+    });
+    h += '</div>';
+
+    h += '<div class="card"><h3>Oportunidades — para conversar individualmente</h3>';
+    var oport = d.oportunidades || [];
+    if (!oport.length){ h += '<div class="mod-vazio">Nenhuma reclamação nominal neste mês.</div>'; }
+    oport.forEach(function(o){
+      h += '<div class="mod-item" style="align-items:flex-start"><span class="txt"><b>' + esc(o.pessoa) + '</b><br><span class="mod-msg">' + esc(o.resumo) + '</span></span>';
+      h += '<span class="mod-tag">' + o.mencoes + (o.mencoes===1?' menção':' menções') + '</span></div>';
+    });
+    h += '</div>';
+
+    h += '<div class="card"><h3>Temas gerais</h3>';
+    h += '<div class="cardsub">Padrões que aparecem em várias respostas, não ligados a uma pessoa só.</div>';
+    var temas = d.temas || [];
+    temas.forEach(function(t){
+      h += '<div class="mod-item" style="align-items:flex-start"><span class="txt"><b>' + esc(t.tema) + '</b><br><span class="mod-msg">' + esc(t.resumo) + '</span></span>';
+      h += '<span class="mod-tag">' + t.mencoes + '×</span></div>';
+    });
+    h += '</div>';
+
+    h += '<div class="mod-aviso" style="margin:0 0 30px">Essa aba não atualiza sozinha — exporte o CSV do formulário no fim do mês e envie no chat para eu processar e atualizar aqui.</div>';
+
+    box.innerHTML = h;
+
+    var sel = document.getElementById('cli-mes-sel');
+    if (sel) sel.addEventListener('change', function(){ mesSel = sel.value; render(); });
+  }
+
+  render();
 };
 
 </script></body></html>
