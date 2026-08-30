@@ -3651,6 +3651,25 @@ window.initClientes = async function initClientes(){
   var linhas = rAll.data || [];
   var mesSel = linhas.length ? linhas[0].mes : null;
 
+  if (linhas.length){
+    try{
+      var porMesCli = {};
+      linhas.forEach(function(r){
+        porMesCli[r.mes] = {
+          total_respostas: r.total_respostas, nota_media: r.nota_media,
+          pct_recomenda: r.pct_recomenda, pct_oferece_ajuda: r.pct_oferece_ajuda,
+          dados: r.dados
+        };
+      });
+      var atualCli = await sb.from('resumo_cache').select('dados').eq('id',1).single();
+      if (!atualCli.error){
+        var rdadosCli = atualCli.data.dados || {};
+        rdadosCli.clientes_por_mes = porMesCli;
+        await sb.from('resumo_cache').update({ dados: rdadosCli, atualizado_em: new Date().toISOString() }).eq('id',1);
+      }
+    }catch(e){ /* best-effort */ }
+  }
+
   function mesLabel(ym){
     var MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     var mp = ym.split('-');
