@@ -3598,6 +3598,27 @@ window.initGerencial = async function initGerencial(){
 
   dados = await carregarMes(mesSel);
   render();
+
+  // corrige a linha "ao vivo" do fechamento anual: o mês corrente deve usar o lucro
+  // de VENDAS (margem final, calculada aqui) e não o de ENTRADAS (caixa, do confronto diário)
+  if (mesSel === mesAtual()){
+    try{
+      var atualAn = await sb.from('resumo_cache').select('dados').eq('id',1).single();
+      if (!atualAn.error && atualAn.data && atualAn.data.dados && atualAn.data.dados.anual_mensal){
+        var rdadosAn = atualAn.data.dados;
+        var liveEntry = (rdadosAn.anual_mensal.meses || []).filter(function(m){ return m.live; })[0];
+        if (liveEntry){
+          var c0 = calc(dados);
+          liveEntry.suplementos = {
+            saldo: c0.margemFinR,
+            ramon: Math.round(c0.margemFinR*0.75*100)/100,
+            anai: Math.round(c0.margemFinR*0.25*100)/100
+          };
+          await sb.from('resumo_cache').update({ dados: rdadosAn, atualizado_em: new Date().toISOString() }).eq('id',1);
+        }
+      }
+    }catch(e){ /* best-effort */ }
+  }
 };
 
 </script></body></html>
