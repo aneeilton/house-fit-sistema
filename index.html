@@ -3531,8 +3531,33 @@ window.initGerencial = async function initGerencial(){
         var rdados = (atual.data && atual.data.dados) || {};
         rdados.gerencial = {
           mes: mesSel,
-          saldo_suplemento: calc2.saldoConta,
-          saldo_planos: calc2.saldoPlanos,
+          suplementos: {
+            quantidade_produtos: n(dados.quantidade_produtos),
+            crediario: n(dados.crediario), cartao: n(dados.cartao), dinheiro_pix: n(dados.dinheiro_pix),
+            soma: calc2.soma,
+            custo_venda: n(dados.custo_venda), quebra_doacao: n(dados.quebra_doacao),
+            margem_comercial_rs: calc2.margemComR, margem_comercial_pct: calc2.margemComP,
+            margem_final_rs: calc2.margemFinR, margem_final_pct: calc2.margemFinP,
+            saldo_mes_passado: n(dados.saldo_mes_passado),
+            entrada_real: calc2.entradaReal,
+            compras_mes: n(dados.compras_mes),
+            participacao_ramon: calc2.supRamon, participacao_anai: calc2.supAnai,
+            saldo_em_conta: calc2.saldoConta
+          },
+          planos: {
+            modalidades: [
+              { nome:'Musculação', receita:n(dados.musc_receita), futuro:n(dados.musc_futuro) },
+              { nome:'Aulas coletivas', receita:n(dados.aulas_receita), futuro:n(dados.aulas_futuro) },
+              { nome:'Atendimentos', receita:n(dados.atend_receita), futuro:n(dados.atend_futuro) },
+              { nome:'A receber cartão', receita:n(dados.arecceb_receita), futuro:n(dados.arecceb_futuro) },
+              { nome:'Total Pass', receita:n(dados.totalpass_receita), futuro:n(dados.totalpass_futuro) },
+              { nome:'Well Hub', receita:n(dados.wellhub_receita), futuro:n(dados.wellhub_futuro) }
+            ],
+            total_receita: calc2.totalAtivosReceita, total_futuro: calc2.totalAtivosFuturo,
+            despesas_pagas: n(dados.despesas_pagas),
+            saldo: calc2.saldoPlanos,
+            ramon: calc2.planosRamon, anai: calc2.planosAnai
+          },
           geral_ramon: calc2.geralRamon,
           geral_anai: calc2.geralAnai
         };
