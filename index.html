@@ -3395,14 +3395,15 @@ window.initGerencial = async function initGerencial(){
       .reduce(function(t,x){ return t + n(x.dinheiro) + n(x.pix) + n(x.cartao) + n(x.recebParcDinheiro) + n(x.recebParcPix); }, 0);
   }
 
-  function calc(d){
+  function calc(d, ymRef){
+    var ym = ymRef || mesSel;
     var soma = n(d.crediario) + n(d.cartao) + n(d.dinheiro_pix);
     var margemComR = soma - n(d.custo_venda);
     var margemComP = soma ? margemComR / soma : null;
     var margemFinR = margemComR - n(d.quebra_doacao);
     var margemFinP = soma ? margemFinR / soma : null;
     var supRamon = margemFinR * 0.75, supAnai = margemFinR * 0.25;
-    var entradaReal = entradaRealSuplementos(mesSel);
+    var entradaReal = entradaRealSuplementos(ym);
     var saldoConta = n(d.saldo_mes_passado) + entradaReal - n(d.compras_mes) - supRamon - supAnai;
     var totalCrediario = n(d.fiado_a_vencer) + n(d.fiado_vencido_mais60) + n(d.fiado_vencido_menos60);
     var totalAtivosReceita = n(d.musc_receita)+n(d.aulas_receita)+n(d.atend_receita)+n(d.arecceb_receita)+n(d.totalpass_receita)+n(d.wellhub_receita);
@@ -3539,65 +3540,76 @@ window.initGerencial = async function initGerencial(){
       btnSalvar.disabled = false;
       if (res.error){ msg.textContent = 'Não consegui salvar — tenta de novo.'; return; }
       msg.textContent = 'Salvo.';
-      var calc2 = calc(dados);
-      try{
-        var atual = await sb.from('resumo_cache').select('dados').eq('id',1).single();
-        if (atual.error) throw new Error('não consegui ler o resumo atual: ' + atual.error.message);
-        var rdados = atual.data.dados || {};
-        rdados.gerencial = {
-          mes: mesSel,
-          suplementos: {
-            quantidade_produtos: n(dados.quantidade_produtos),
-            crediario: n(dados.crediario), cartao: n(dados.cartao), dinheiro_pix: n(dados.dinheiro_pix),
-            soma: calc2.soma,
-            custo_venda: n(dados.custo_venda), quebra_doacao: n(dados.quebra_doacao),
-            margem_comercial_rs: calc2.margemComR, margem_comercial_pct: calc2.margemComP,
-            margem_final_rs: calc2.margemFinR, margem_final_pct: calc2.margemFinP,
-            saldo_mes_passado: n(dados.saldo_mes_passado),
-            entrada_real: calc2.entradaReal,
-            compras_mes: n(dados.compras_mes),
-            participacao_ramon: calc2.supRamon, participacao_anai: calc2.supAnai,
-            saldo_em_conta: calc2.saldoConta
-          },
-          planos: {
-            modalidades: [
-              { nome:'Musculação', receita:n(dados.musc_receita), futuro:n(dados.musc_futuro) },
-              { nome:'Aulas coletivas', receita:n(dados.aulas_receita), futuro:n(dados.aulas_futuro) },
-              { nome:'Atendimentos', receita:n(dados.atend_receita), futuro:n(dados.atend_futuro) },
-              { nome:'A receber cartão', receita:n(dados.arecceb_receita), futuro:n(dados.arecceb_futuro) },
-              { nome:'Total Pass', receita:n(dados.totalpass_receita), futuro:n(dados.totalpass_futuro) },
-              { nome:'Well Hub', receita:n(dados.wellhub_receita), futuro:n(dados.wellhub_futuro) }
-            ],
-            total_receita: calc2.totalAtivosReceita, total_futuro: calc2.totalAtivosFuturo,
-            despesas_pagas: n(dados.despesas_pagas),
-            saldo: calc2.saldoPlanos,
-            ramon: calc2.planosRamon, anai: calc2.planosAnai
-          },
-          estoque: {
-            valor_custo: n(dados.valor_custo_estoque),
-            valor_venda: n(dados.valor_venda_estoque),
-            em_transito: n(dados.em_transito)
-          },
-          fiado: {
-            a_vencer: n(dados.fiado_a_vencer),
-            vencido_mais60: n(dados.fiado_vencido_mais60),
-            vencido_menos60: n(dados.fiado_vencido_menos60),
-            total: calc2.totalCrediario
-          },
-          geral_ramon: calc2.geralRamon,
-          geral_anai: calc2.geralAnai
-        };
-        var resR = await sb.from('resumo_cache').update({ dados: rdados, atualizado_em: new Date().toISOString() }).eq('id',1);
-        if (resR.error){ msg.textContent = 'Mês salvo, mas o resumo não atualizou: ' + resR.error.message; }
-        else { msg.textContent = 'Salvo — resumo atualizado.'; }
-      }catch(e){
-        msg.textContent = 'Mês salvo, mas o resumo não atualizou (' + (e && e.message ? e.message : 'erro desconhecido') + ').';
-      }
+      var ok = await atualizarResumoGerencialTodos();
+      msg.textContent = ok ? 'Salvo — resumo atualizado.' : 'Mês salvo, mas o resumo não atualizou. Tenta de novo em instantes.';
     });
+  }
+
+  function montarPacoteGerencial(row){
+    var c = calc(row, row.mes);
+    return {
+      suplementos: {
+        quantidade_produtos: n(row.quantidade_produtos),
+        crediario: n(row.crediario), cartao: n(row.cartao), dinheiro_pix: n(row.dinheiro_pix),
+        soma: c.soma,
+        custo_venda: n(row.custo_venda), quebra_doacao: n(row.quebra_doacao),
+        margem_comercial_rs: c.margemComR, margem_comercial_pct: c.margemComP,
+        margem_final_rs: c.margemFinR, margem_final_pct: c.margemFinP,
+        saldo_mes_passado: n(row.saldo_mes_passado),
+        entrada_real: c.entradaReal,
+        compras_mes: n(row.compras_mes),
+        participacao_ramon: c.supRamon, participacao_anai: c.supAnai,
+        saldo_em_conta: c.saldoConta
+      },
+      planos: {
+        modalidades: [
+          { nome:'Musculação', receita:n(row.musc_receita), futuro:n(row.musc_futuro) },
+          { nome:'Aulas coletivas', receita:n(row.aulas_receita), futuro:n(row.aulas_futuro) },
+          { nome:'Atendimentos', receita:n(row.atend_receita), futuro:n(row.atend_futuro) },
+          { nome:'A receber cartão', receita:n(row.arecceb_receita), futuro:n(row.arecceb_futuro) },
+          { nome:'Total Pass', receita:n(row.totalpass_receita), futuro:n(row.totalpass_futuro) },
+          { nome:'Well Hub', receita:n(row.wellhub_receita), futuro:n(row.wellhub_futuro) }
+        ],
+        total_receita: c.totalAtivosReceita, total_futuro: c.totalAtivosFuturo,
+        despesas_pagas: n(row.despesas_pagas),
+        saldo: c.saldoPlanos,
+        ramon: c.planosRamon, anai: c.planosAnai
+      },
+      estoque: {
+        valor_custo: n(row.valor_custo_estoque),
+        valor_venda: n(row.valor_venda_estoque),
+        em_transito: n(row.em_transito)
+      },
+      fiado: {
+        a_vencer: n(row.fiado_a_vencer),
+        vencido_mais60: n(row.fiado_vencido_mais60),
+        vencido_menos60: n(row.fiado_vencido_menos60),
+        total: c.totalCrediario
+      },
+      geral_ramon: c.geralRamon,
+      geral_anai: c.geralAnai
+    };
+  }
+
+  async function atualizarResumoGerencialTodos(){
+    try{
+      var rAll = await sb.from('gerencial_mensal').select('*');
+      if (rAll.error) return false;
+      var porMes = {};
+      (rAll.data||[]).forEach(function(row){ porMes[row.mes] = montarPacoteGerencial(row); });
+      var atual = await sb.from('resumo_cache').select('dados').eq('id',1).single();
+      if (atual.error) return false;
+      var rdados = atual.data.dados || {};
+      rdados.gerencial_por_mes = porMes;
+      var res2 = await sb.from('resumo_cache').update({ dados: rdados, atualizado_em: new Date().toISOString() }).eq('id',1);
+      return !res2.error;
+    }catch(e){ return false; }
   }
 
   dados = await carregarMes(mesSel);
   render();
+
+  await atualizarResumoGerencialTodos();
 
   // corrige a linha "ao vivo" do fechamento anual: o mês corrente deve usar o lucro
   // de VENDAS (margem final, calculada aqui) e não o de ENTRADAS (caixa, do confronto diário)

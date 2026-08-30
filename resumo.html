@@ -126,6 +126,7 @@
   .view.active { display: block; }
 
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .kpis-2col { grid-template-columns: repeat(2, 1fr) !important; }
   .kpi { background: var(--surface-1); border-radius: 10px; padding: 16px 18px; box-shadow: var(--card-shadow); }
   .kpi .label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
   .kpi .value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -388,6 +389,7 @@
   .card-estoque { border-top:4px solid #4F8A5B; }
   .card-fiado { border-top:4px solid #8A5FBF; }
   .card-links { border-top:4px solid #C2410C; }
+  .card-anual { border-top:4px solid #B23A48; }
   .linha-link { cursor:pointer; text-decoration:none; color:inherit; }
   .linha-link .lbl { color:#2E6F9E; font-weight:600; }
   .linha-link:active .lbl { color:#FF6E01; }
@@ -417,8 +419,7 @@
     <div id="ra-conteudo"></div>
 
     <div class="rodape-resumo">
-      Página só de leitura — sem lançamentos, sem edição, sem acesso aos registros individuais da equipe.<br>
-      Os números refletem o último fechamento enviado pelo sistema.
+      Não se gerencia o que não se conhece. Leitura completa do negócio.
     </div>
 
   </div>
@@ -440,46 +441,61 @@
   function pctFmt(v){ return v == null ? '—' : (v*100).toLocaleString('pt-BR',{maximumFractionDigits:1}) + '%'; }
   function saida(v){ return '<span class="val-saida">-' + brl(Math.abs(Number(v)||0)) + '</span>'; }
 
+  var dadosCompletos = null, atualizadoEmGlobal = null, mesEscolhido = null;
+
+  function mesLabel(ym){
+    var MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    var mp = ym.split('-');
+    return MESES_PT[parseInt(mp[1],10)-1] + '/' + mp[0];
+  }
+
   function render(d, atualizadoEm){
-    var g = d.gerencial || {}, gs = g.suplementos || {}, gp = g.planos || {};
+    dadosCompletos = d;
+    atualizadoEmGlobal = atualizadoEm;
+    var gpm = d.gerencial_por_mes || {};
+    var mesesDisp = Object.keys(gpm).sort().reverse();
+    if (!mesEscolhido || !gpm[mesEscolhido]) mesEscolhido = mesesDisp[0];
+    var g = mesEscolhido ? Object.assign({ mes: mesEscolhido }, gpm[mesEscolhido]) : {};
+    var gs = g.suplementos || {}, gp = g.planos || {};
 
     document.getElementById('ra-atualizado').innerHTML =
-      'Dados de: <b>' + esc(d.mes_ref || '—') + '</b> · Atualizado em: <b>' +
-      (atualizadoEm ? new Date(atualizadoEm).toLocaleString('pt-BR') : '—') + '</b>';
+      'Dados de: <b>' + esc(d.mes_ref || '\u2014') + '</b> \u00b7 Atualizado em: <b>' +
+      (atualizadoEm ? new Date(atualizadoEm).toLocaleString('pt-BR') : '\u2014') + '</b>';
 
     var h = '';
 
-    if (g.mes){
-      var MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-      var mp = g.mes.split('-');
-      var mesGerLabel = MESES_PT[parseInt(mp[1],10)-1] + '/' + mp[0];
+    if (mesesDisp.length){
+      h += '<div class="card"><div class="mod-linha"><label style="font-size:13px">M\u00eas: </label>';
+      h += '<select class="mod-campo" id="rs-mes-sel" style="max-width:160px">';
+      mesesDisp.forEach(function(ym){
+        h += '<option value="' + ym + '"' + (ym===mesEscolhido?' selected':'') + '>' + mesLabel(ym) + '</option>';
+      });
+      h += '</select></div></div>';
 
-      h += '<div class="card"><div class="setor-titulo">Fechamento — ' + esc(mesGerLabel) + '</div>';
-      h += '<div class="setor-sub">Resultado do mês, por setor.</div></div>';
+      h += '<div class="card"><div class="setor-titulo">Fechamento \u2014 ' + esc(mesLabel(mesEscolhido)) + '</div>';
+      h += '<div class="setor-sub">Resultado do m\u00eas, por setor.</div></div>';
 
-      // ---------- SETOR SUPLEMENTOS ----------
       h += '<div class="card card-suplementos"><div class="setor-titulo">Suplementos</div>';
       h += '<div class="linha-dado"><span class="lbl">Quantidade em produtos</span><span class="val">' + (gs.quantidade_produtos||0) + '</span></div>';
-      h += '<div class="linha-dado"><span class="lbl">Crediário</span><span class="val">' + brl(gs.crediario) + '</span></div>';
-      h += '<div class="linha-dado"><span class="lbl">Cartão</span><span class="val">' + brl(gs.cartao) + '</span></div>';
+      h += '<div class="linha-dado"><span class="lbl">Credi\u00e1rio</span><span class="val">' + brl(gs.crediario) + '</span></div>';
+      h += '<div class="linha-dado"><span class="lbl">Cart\u00e3o</span><span class="val">' + brl(gs.cartao) + '</span></div>';
       h += '<div class="linha-dado"><span class="lbl">Dinheiro / PIX</span><span class="val">' + brl(gs.dinheiro_pix) + '</span></div>';
       h += '<div class="linha-dado"><span class="lbl">Venda bruta (soma)</span><span class="val">' + brl(gs.soma) + '</span></div>';
       h += '<div class="linha-dado"><span class="lbl">Custo venda</span><span class="val">' + saida(gs.custo_venda) + '</span></div>';
-      h += '<div class="linha-dado"><span class="lbl">Quebra / Doação</span><span class="val">' + saida(gs.quebra_doacao) + '</span></div>';
-      h += '<div class="linha-dado"><span class="lbl">Margem comercial</span><span class="val">' + brl(gs.margem_comercial_rs) + ' · ' + pctFmt(gs.margem_comercial_pct) + '</span></div>';
-      h += '<div class="linha-final"><span class="lbl">Lucro Suplementos</span><span class="val ' + ((gs.margem_final_rs||0)>=0?'pos':'neg') + '">' + brl(gs.margem_final_rs) + ' · ' + pctFmt(gs.margem_final_pct) + '</span></div>';
+      h += '<div class="linha-dado"><span class="lbl">Quebra / Doa\u00e7\u00e3o</span><span class="val">' + saida(gs.quebra_doacao) + '</span></div>';
+      h += '<div class="linha-dado"><span class="lbl">Margem comercial</span><span class="val">' + brl(gs.margem_comercial_rs) + ' \u00b7 ' + pctFmt(gs.margem_comercial_pct) + '</span></div>';
+      h += '<div class="linha-final"><span class="lbl">Lucro Suplementos</span><span class="val ' + ((gs.margem_final_rs||0)>=0?'pos':'neg') + '">' + brl(gs.margem_final_rs) + ' \u00b7 ' + pctFmt(gs.margem_final_pct) + '</span></div>';
 
-      h += '<div class="setor-sub" style="margin-top:18px">Caixa do setor — o que sobra para pagar as compras do mês seguinte.</div>';
-      h += '<div class="linha-dado"><span class="lbl">Saldo mês passado</span><span class="val">' + brl(gs.saldo_mes_passado) + '</span></div>';
+      h += '<div class="setor-sub" style="margin-top:18px">Caixa do setor \u2014 o que sobra para pagar as compras do m\u00eas seguinte.</div>';
+      h += '<div class="linha-dado"><span class="lbl">Saldo m\u00eas passado</span><span class="val">' + brl(gs.saldo_mes_passado) + '</span></div>';
       h += '<div class="linha-dado"><span class="lbl">Entrada real no caixa</span><span class="val">' + brl(gs.entrada_real) + '</span></div>';
-      h += '<a class="linha-dado linha-link" href="resumo-compras.html"><span class="lbl">Compras do mês</span><span class="val">' + saida(gs.compras_mes) + '</span></a>';
-      h += '<div class="linha-dado"><span class="lbl">Ramon · 75%</span><span class="val">' + brl(gs.participacao_ramon) + '</span></div>';
-      h += '<div class="linha-dado"><span class="lbl">Anai · 25%</span><span class="val">' + brl(gs.participacao_anai) + '</span></div>';
+      h += '<a class="linha-dado linha-link" href="resumo-compras.html"><span class="lbl">Compras do m\u00eas</span><span class="val">' + saida(gs.compras_mes) + '</span></a>';
+      h += '<div class="linha-dado"><span class="lbl">Ramon \u00b7 75%</span><span class="val">' + brl(gs.participacao_ramon) + '</span></div>';
+      h += '<div class="linha-dado"><span class="lbl">Anai \u00b7 25%</span><span class="val">' + brl(gs.participacao_anai) + '</span></div>';
       h += '<div class="linha-final"><span class="lbl">Saldo em conta</span><span class="val ' + ((gs.saldo_em_conta||0)>=0?'pos':'neg') + '">' + brl(gs.saldo_em_conta) + '</span></div>';
-      h += '<div class="saldo-giro-nota">esse é o saldo de capital de giro que fica em caixa para renovação de estoque</div>';
+      h += '<div class="saldo-giro-nota">esse \u00e9 o saldo de capital de giro que fica em caixa para renova\u00e7\u00e3o de estoque</div>';
       h += '</div>';
 
-      // ---------- SETOR PLANOS ----------
       h += '<div class="card card-planos"><div class="setor-titulo">Planos</div>';
       h += '<table class="tabela-planos"><thead><tr><th>Modalidade</th><th style="text-align:right">Receita</th></tr></thead><tbody>';
       (gp.modalidades||[]).forEach(function(m){
@@ -491,13 +507,10 @@
       h += '<div class="linha-final"><span class="lbl">Lucro final Planos</span><span class="val ' + ((gp.saldo||0)>=0?'pos':'neg') + '">' + brl(gp.saldo) + '</span></div>';
       h += '</div>';
 
-      // ---------- SETOR PLANOS: fim ----------
-
-      // ---------- DASHBOARD COMPARATIVO ----------
       var lucroSup = gs.margem_final_rs || 0, lucroPla = gp.saldo || 0;
       if (lucroSup >= 0 && lucroPla >= 0 && (lucroSup + lucroPla) > 0){
         var maior = Math.max(lucroSup, lucroPla);
-        h += '<div class="card"><div class="setor-titulo" style="font-size:16px">Suplementos × Planos</div>';
+        h += '<div class="card"><div class="setor-titulo" style="font-size:16px">Suplementos \u00d7 Planos</div>';
         h += '<div class="barra-item"><div class="barra-label"><span>Planos</span><b>' + brl(lucroPla) + '</b></div>';
         h += '<div class="barra-trilho"><div class="barra-fill planos" style="width:' + Math.round(lucroPla/maior*100) + '%"></div></div></div>';
         h += '<div class="barra-item"><div class="barra-label"><span>Suplementos</span><b>' + brl(lucroSup) + '</b></div>';
@@ -505,35 +518,47 @@
         h += '</div>';
       }
 
-      // ---------- RESULTADO DA SOCIEDADE ----------
       h += '<div class="card"><div class="setor-titulo">Resultado da sociedade</div>';
-      h += '<div class="setor-sub">Suplementos + Planos, divididos entre os sócios.</div>';
+      h += '<div class="setor-sub">Suplementos + Planos, divididos entre os s\u00f3cios.</div>';
       h += '<div class="divisao-grid">';
-      h += '<div class="kpi"><div class="label">Ramon · 75%</div><div class="value grande">' + brl(g.geral_ramon) + '</div></div>';
-      h += '<div class="kpi"><div class="label">Anai · 25%</div><div class="value grande">' + brl(g.geral_anai) + '</div></div>';
+      h += '<div class="kpi"><div class="label">Ramon \u00b7 75%</div><div class="value grande">' + brl(g.geral_ramon) + '</div></div>';
+      h += '<div class="kpi"><div class="label">Anai \u00b7 25%</div><div class="value grande">' + brl(g.geral_anai) + '</div></div>';
       h += '</div></div>';
 
-      // ---------- ESTOQUE E FIADO ----------
       var est = g.estoque || {}, fia = g.fiado || {};
       var fiadoTotal = (fia.vencido_mais60||0) + (fia.vencido_menos60||0) + (fia.a_vencer||0);
-      h += '<div class="card card-estoque"><div class="setor-titulo">Estoque <span style="font-weight:400;color:var(--muted);font-size:15px">— venda ' + brl(est.valor_venda) + '</span></div>';
-      h += '<div class="kpis">';
+      h += '<div class="card card-estoque"><div class="setor-titulo">Estoque <span style="font-weight:400;color:var(--muted);font-size:15px">\u2014 venda ' + brl(est.valor_venda) + '</span></div>';
+      h += '<div class="kpis kpis-2col">';
       h += '<div class="kpi"><div class="label">Valor de custo</div><div class="value grande">' + brl(est.valor_custo) + '</div></div>';
       h += '<div class="kpi"><div class="label">Valor de venda</div><div class="value grande">' + brl(est.valor_venda) + '</div></div>';
       h += '</div></div>';
 
-      h += '<div class="card card-fiado"><div class="setor-titulo">Fiado <span style="font-weight:400;color:var(--muted);font-size:15px">— total ' + brl(fiadoTotal) + '</span></div>';
-      h += '<div class="kpis">';
+      h += '<div class="card card-fiado"><div class="setor-titulo">Fiado <span style="font-weight:400;color:var(--muted);font-size:15px">\u2014 total ' + brl(fiadoTotal) + '</span></div>';
+      h += '<div class="kpis kpis-2col">';
       h += '<div class="kpi"><div class="label">Vencido + 60 dias</div><div class="value grande">' + brl(fia.vencido_mais60) + '</div></div>';
       h += '<div class="kpi"><div class="label">Vencido - 60 dias</div><div class="value grande">' + brl(fia.vencido_menos60) + '</div></div>';
       h += '<div class="kpi"><div class="label">A vencer</div><div class="value grande">' + brl(fia.a_vencer) + '</div></div>';
       h += '</div></div>';
 
-      // ---------- FECHAMENTO ANUAL ----------
+      h += '<div class="card card-links"><div class="setor-titulo">Links para confer\u00eancia</div>';
+      h += '<div class="setor-sub">Confronte estes n\u00fameros com os sistemas originais.</div>';
+      var linksConf = [
+        ['Extrato das contas', 'https://drive.google.com/drive/folders/1WPSaQnnusOZ40LN8ywyf2vBnkvgc47hx?usp=drive_link'],
+        ['Consultar planos ativos', 'https://app.nextfit.com.br/relatorio/relatorioreceitadetalhado'],
+        ['Valores a receber cart\u00e3o', 'https://app.nextfit.com.br/financeiro/recebafacil/online'],
+        ['Vendas Total Pass', 'https://booking.totalpass.com/br/login'],
+        ['Vendas Well Hub', 'https://partners.gympass.com/new/finance/36e91f88-c6ee-4d7d-88c8-a6a79ccf6d60'],
+        ['Comprovantes despesas', 'https://drive.google.com/drive/folders/1Vd_Kw8R8Zhtd1k2Us405vXeyO-8VkHfw?usp=drive_link']
+      ];
+      linksConf.forEach(function(l){
+        h += '<a class="linha-dado linha-link" target="_blank" rel="noopener" href="' + esc(l[1]) + '"><span class="lbl">' + esc(l[0]) + '</span></a>';
+      });
+      h += '</div>';
+
       var an = d.anual_mensal || {};
       if (an.meses && an.meses.length){
-        h += '<div class="resumo-secao">Fechamento anual — mês a mês</div>';
-        h += '<table class="tabela-anual"><thead><tr><th>Mês</th><th>Saldo</th><th>Ramon / Anai</th></tr></thead><tbody>';
+        h += '<div class="card card-anual"><div class="setor-titulo">Fechamento anual \u2014 m\u00eas a m\u00eas</div>';
+        h += '<table class="tabela-anual"><thead><tr><th>M\u00eas</th><th>Saldo</th><th>Ramon / Anai</th></tr></thead><tbody>';
         an.meses.forEach(function(m){
           var saldoSup = (m.suplementos||{}).saldo || 0;
           var saldoTotal = (m.planos.saldo||0) + saldoSup;
@@ -543,27 +568,17 @@
           h += '<td>' + brl(saldoTotal) + '</td><td>' + brl(ramonMes) + ' / ' + brl(anaiMes) + '</td></tr>';
         });
         h += '<tr class="total"><td>Total acumulado</td><td></td><td>' + brl(an.totalRamon) + ' / ' + brl(an.totalAnai) + '</td></tr>';
-        h += '</tbody></table>';
+        h += '</tbody></table></div>';
       }
-
-      // ---------- LINKS PARA CONFERÊNCIA ----------
-      h += '<div class="card card-links"><div class="setor-titulo">Links para conferência</div>';
-      h += '<div class="setor-sub">Confronte estes números com os sistemas originais.</div>';
-      var linksConf = [
-        ['Extrato das contas', 'https://drive.google.com/drive/folders/1WPSaQnnusOZ40LN8ywyf2vBnkvgc47hx?usp=drive_link'],
-        ['Consultar planos ativos', 'https://app.nextfit.com.br/relatorio/relatorioreceitadetalhado'],
-        ['Valores a receber cartão', 'https://app.nextfit.com.br/financeiro/recebafacil/online'],
-        ['Vendas Total Pass', 'https://booking.totalpass.com/br/login'],
-        ['Vendas Well Hub', 'https://partners.gympass.com/new/finance/36e91f88-c6ee-4d7d-88c8-a6a79ccf6d60'],
-        ['Comprovantes despesas', 'https://drive.google.com/drive/folders/1Vd_Kw8R8Zhtd1k2Us405vXeyO-8VkHfw?usp=drive_link']
-      ];
-      linksConf.forEach(function(l){
-        h += '<a class="linha-dado linha-link" target="_blank" rel="noopener" href="' + esc(l[1]) + '"><span class="lbl">' + esc(l[0]) + '</span></a>';
-      });
-      h += '</div>';
     }
 
     document.getElementById('ra-conteudo').innerHTML = h;
+
+    var sel = document.getElementById('rs-mes-sel');
+    if (sel) sel.addEventListener('change', function(){
+      mesEscolhido = sel.value;
+      render(dadosCompletos, atualizadoEmGlobal);
+    });
   }
 
   fetch(SUPABASE_URL + '/rest/v1/resumo_cache?select=dados,atualizado_em&id=eq.1', {
