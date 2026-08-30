@@ -385,6 +385,8 @@
   .saldo-giro-nota { font-size:11.5px; color:var(--muted); margin-top:4px; text-transform:lowercase; }
   .card-suplementos { border-top:4px solid #2E6F9E; }
   .card-planos { border-top:4px solid #0C0C0C; }
+  .card-estoque { border-top:4px solid #4F8A5B; }
+  .card-fiado { border-top:4px solid #8A5FBF; }
   .linha-link { cursor:pointer; text-decoration:none; color:inherit; }
   .linha-link .lbl { color:#2E6F9E; font-weight:600; }
   .linha-link:active .lbl { color:#FF6E01; }
@@ -512,30 +514,34 @@
 
       // ---------- ESTOQUE E FIADO ----------
       var est = g.estoque || {}, fia = g.fiado || {};
-      h += '<div class="resumo-secao">Estoque</div><div class="kpis">';
+      var fiadoTotal = (fia.vencido_mais60||0) + (fia.vencido_menos60||0) + (fia.a_vencer||0);
+      h += '<div class="card card-estoque"><div class="setor-titulo">Estoque <span style="font-weight:400;color:var(--muted);font-size:15px">— venda ' + brl(est.valor_venda) + '</span></div>';
+      h += '<div class="kpis">';
       h += '<div class="kpi"><div class="label">Valor de custo</div><div class="value grande">' + brl(est.valor_custo) + '</div></div>';
       h += '<div class="kpi"><div class="label">Valor de venda</div><div class="value grande">' + brl(est.valor_venda) + '</div></div>';
-      h += '</div>';
+      h += '</div></div>';
 
-      h += '<div class="resumo-secao">Fiado</div><div class="kpis">';
-      h += '<div class="kpi"><div class="label">A vencer</div><div class="value grande">' + brl(fia.a_vencer) + '</div></div>';
+      h += '<div class="card card-fiado"><div class="setor-titulo">Fiado <span style="font-weight:400;color:var(--muted);font-size:15px">— total ' + brl(fiadoTotal) + '</span></div>';
+      h += '<div class="kpis">';
       h += '<div class="kpi"><div class="label">Vencido + 60 dias</div><div class="value grande">' + brl(fia.vencido_mais60) + '</div></div>';
       h += '<div class="kpi"><div class="label">Vencido - 60 dias</div><div class="value grande">' + brl(fia.vencido_menos60) + '</div></div>';
-      h += '</div>';
+      h += '<div class="kpi"><div class="label">A vencer</div><div class="value grande">' + brl(fia.a_vencer) + '</div></div>';
+      h += '</div></div>';
 
       // ---------- FECHAMENTO ANUAL ----------
       var an = d.anual_mensal || {};
       if (an.meses && an.meses.length){
         h += '<div class="resumo-secao">Fechamento anual — mês a mês</div>';
-        h += '<table class="tabela-anual"><thead><tr><th>Mês</th><th>Saldo Planos</th><th>Saldo Suplementos</th><th>Ramon</th><th>Anai</th></tr></thead><tbody>';
+        h += '<table class="tabela-anual"><thead><tr><th>Mês</th><th>Saldo</th><th>Ramon / Anai</th></tr></thead><tbody>';
         an.meses.forEach(function(m){
           var saldoSup = (m.suplementos||{}).saldo || 0;
+          var saldoTotal = (m.planos.saldo||0) + saldoSup;
           var ramonMes = (m.planos.ramon||0) + (m.suplementos.ramon||0);
           var anaiMes = (m.planos.anai||0) + (m.suplementos.anai||0);
           h += '<tr' + (m.live ? ' class="live"' : '') + '><td>' + esc(m.mes) + (m.live ? ' (em aberto)' : '') + '</td>';
-          h += '<td>' + brl(m.planos.saldo) + '</td><td>' + brl(saldoSup) + '</td><td>' + brl(ramonMes) + '</td><td>' + brl(anaiMes) + '</td></tr>';
+          h += '<td>' + brl(saldoTotal) + '</td><td>' + brl(ramonMes) + ' / ' + brl(anaiMes) + '</td></tr>';
         });
-        h += '<tr class="total"><td>Total acumulado (meses fechados)</td><td colspan="2"></td><td>' + brl(an.totalRamon) + '</td><td>' + brl(an.totalAnai) + '</td></tr>';
+        h += '<tr class="total"><td>Total acumulado</td><td></td><td>' + brl(an.totalRamon) + ' / ' + brl(an.totalAnai) + '</td></tr>';
         h += '</tbody></table>';
       }
     }
