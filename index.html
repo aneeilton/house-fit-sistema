@@ -418,7 +418,7 @@
 
       <div class="card">
         <h3>Resumo mensal por sócio</h3>
-        <div class="cardsub"><span id="anual-mes-live-label"></span> é o mês corrente, calculado ao vivo pelos lançamentos, e só entra no total acumulado depois do fechamento do mês</div>
+        <div class="cardsub"><span id="anual-mes-live-label"></span> é o mês corrente — ele só aparece nesta tabela depois de fechado, com o lucro de vendas apurado (não é o mesmo cálculo das entradas de caixa)</div>
         <div class="scroll-table"><table class="datatable" id="tabela-anual-resumo"></table></div>
       </div>
     </div>
@@ -677,7 +677,10 @@ window.atualizarResumoFinanceiro = async function(){
       dados.anual_mensal = { meses: DATA.anual_socios.meses, totalRamon: DATA.anual_socios.totalRamon, totalAnai: DATA.anual_socios.totalAnai };
     }
     await sb.from('resumo_cache').update({ dados: dados, atualizado_em: new Date().toISOString() }).eq('id',1);
-  }catch(e){ /* resumo é best-effort */ }
+  }catch(e){
+    console.error('atualizarResumoFinanceiro falhou:', e);
+    if (window.showToast) window.showToast('Salvo aqui, mas não consegui atualizar o resumo agora.', true);
+  }
 };
 
 var CATEGORIA_TO_GRUPO_TOP = {
@@ -809,23 +812,9 @@ function buildAnualSocios(diaria, refMes){
   });
   var planoSaldo = diaria.contas.planos.saldo;
   var supSaldoLive = diaria.contas.suplementos.saldo;
-  meses.push({
-    mes: refMes,
-    live: true,
-    planos: {
-      receita: diaria.contas.planos.receita,
-      despesas: -diaria.contas.planos.despesas,
-      saldo: planoSaldo,
-      emConta: null,
-      ramon: round2(planoSaldo * 0.75),
-      anai: round2(planoSaldo * 0.25)
-    },
-    suplementos: {
-      saldo: supSaldoLive,
-      ramon: round2(supSaldoLive * 0.75),
-      anai: round2(supSaldoLive * 0.25)
-    }
-  });
+  // O mês corrente NÃO entra na tabela enquanto estiver aberto: o saldo de suplementos aqui é
+  // lido pelo caixa (entradas), que é diferente do lucro de vendas usado no fechamento oficial
+  // (Gerencial). Esse mês só aparece depois de fechado, com o número certo.
   // O total acumulado é a SOMA das colunas Ramon/Anai dos meses FECHADOS já exibidas na
   // tabela (incluindo meses de prejuízo, como Fev e Mar em Planos) — nunca recalculado de
   // outra forma, para o total bater sempre, centavo a centavo, com a soma visível dos meses.
@@ -1687,6 +1676,7 @@ window.initFinanceiro = async function initFinanceiro(){
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function(){ el.style.display='none'; }, 5000);
   }
+  window.showToast = showToast;
 
   // ---------- render ----------
   function renderBody(state){
@@ -3407,6 +3397,12 @@ window.initGerencial = async function initGerencial(){
       .reduce(function(t,x){ return t + n(x.dinheiro) + n(x.pix) + n(x.cartao) + n(x.recebParcDinheiro) + n(x.recebParcPix); }, 0);
   }
 
+  function despesasRealDoMes(ym){
+    var lista = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.despesas) ? LANCAMENTOS.despesas : [];
+    return lista.filter(function(x){ return String(x.data||'').slice(0,7) === ym; })
+      .reduce(function(t,x){ return t + n(x.valor); }, 0);
+  }
+
   function calc(d, ymRef){
     var ym = ymRef || mesSel;
     var soma = n(d.crediario) + n(d.cartao) + n(d.dinheiro_pix);
@@ -3421,14 +3417,15 @@ window.initGerencial = async function initGerencial(){
     var totalAtivosReceita = n(d.musc_receita)+n(d.aulas_receita)+n(d.atend_receita)+n(d.arecceb_receita)+n(d.totalpass_receita)+n(d.wellhub_receita);
     var totalAtivosFuturo = n(d.musc_futuro)+n(d.aulas_futuro)+n(d.atend_futuro)+n(d.arecceb_futuro)+n(d.totalpass_futuro)+n(d.wellhub_futuro);
     var receitasPlanos = totalAtivosReceita;
-    var saldoPlanos = receitasPlanos - n(d.despesas_pagas);
+    var despesasReal = despesasRealDoMes(ym);
+    var saldoPlanos = receitasPlanos - despesasReal;
     var planosRamon = saldoPlanos * 0.75, planosAnai = saldoPlanos * 0.25;
     var geralRamon = planosRamon + supRamon, geralAnai = planosAnai + supAnai;
     return {
       soma: soma, margemComR: margemComR, margemComP: margemComP, margemFinR: margemFinR, margemFinP: margemFinP,
       supRamon: supRamon, supAnai: supAnai, entradaReal: entradaReal, saldoConta: saldoConta, totalCrediario: totalCrediario,
       totalAtivosReceita: totalAtivosReceita, totalAtivosFuturo: totalAtivosFuturo,
-      receitasPlanos: receitasPlanos, saldoPlanos: saldoPlanos, planosRamon: planosRamon, planosAnai: planosAnai,
+      receitasPlanos: receitasPlanos, despesasReal: despesasReal, saldoPlanos: saldoPlanos, planosRamon: planosRamon, planosAnai: planosAnai,
       geralRamon: geralRamon, geralAnai: geralAnai, saldo_em_conta: saldoConta
     };
   }
@@ -3500,8 +3497,9 @@ window.initGerencial = async function initGerencial(){
     h += '</div>';
 
     h += '<div class="card"><h3>Planos — financeiro</h3>';
+    h += '<div class="cardsub">Despesas puxadas direto do que foi lançado no mês em Lançamento → Saídas.</div>';
     h += '<div class="mod-item"><span class="txt">Receitas</span><span class="mod-tag">' + brl(c.receitasPlanos) + '</span></div>';
-    h += campo('ger-despesas', 'Despesas pagas', dados.despesas_pagas);
+    h += '<div class="mod-item"><span class="txt">Despesas pagas (Lançamento)</span><span class="mod-tag">' + brl(c.despesasReal) + '</span></div>';
     h += '<div class="mod-item"><span class="txt"><b>Saldo</b></span><span class="mod-tag' + (c.saldoPlanos>=0?' ok':' grave') + '"><b>' + brl(c.saldoPlanos) + '</b></span></div>';
     h += '<div class="mod-item"><span class="txt">75% Ramon</span><span class="mod-tag">' + brl(c.planosRamon) + '</span></div>';
     h += '<div class="mod-item"><span class="txt">25% Anai</span><span class="mod-tag">' + brl(c.planosAnai) + '</span></div>';
@@ -3622,27 +3620,6 @@ window.initGerencial = async function initGerencial(){
   render();
 
   await atualizarResumoGerencialTodos();
-
-  // corrige a linha "ao vivo" do fechamento anual: o mês corrente deve usar o lucro
-  // de VENDAS (margem final, calculada aqui) e não o de ENTRADAS (caixa, do confronto diário)
-  if (mesSel === mesAtual()){
-    try{
-      var atualAn = await sb.from('resumo_cache').select('dados').eq('id',1).single();
-      if (!atualAn.error && atualAn.data && atualAn.data.dados && atualAn.data.dados.anual_mensal){
-        var rdadosAn = atualAn.data.dados;
-        var liveEntry = (rdadosAn.anual_mensal.meses || []).filter(function(m){ return m.live; })[0];
-        if (liveEntry){
-          var c0 = calc(dados);
-          liveEntry.suplementos = {
-            saldo: c0.margemFinR,
-            ramon: Math.round(c0.margemFinR*0.75*100)/100,
-            anai: Math.round(c0.margemFinR*0.25*100)/100
-          };
-          await sb.from('resumo_cache').update({ dados: rdadosAn, atualizado_em: new Date().toISOString() }).eq('id',1);
-        }
-      }
-    }catch(e){ /* best-effort */ }
-  }
 };
 
 window.initClientes = async function initClientes(){
