@@ -1356,7 +1356,18 @@ renderAnual();
 document.getElementById('ref-atualizacao').textContent = DATA_ATUALIZADA_EM;
 
 window.initSaldoOnline = async function initSaldoOnline(){
-  var so = LANCAMENTOS.saldoOnline || EXTERNAL.confronto_online || {};
+  var hoje = todayISOTop().slice(0,7);
+  var ymSel = window.mesGlobal || hoje;
+  var souMesAtual = (ymSel === hoje);
+
+  var so;
+  if (souMesAtual){
+    so = LANCAMENTOS.saldoOnline || EXTERNAL.confronto_online || {};
+  } else {
+    var snap = (window.gerencialSaldoOnlinePorMes || {})[ymSel];
+    so = snap ? { Dinheiro: snap.dinheiro, C6: snap.c6, Infinity: snap.infinity } : {};
+  }
+
   var dEl = document.getElementById('saldo-online-dinheiro');
   var cEl = document.getElementById('saldo-online-c6');
   var iEl = document.getElementById('saldo-online-infinity');
@@ -1367,21 +1378,18 @@ window.initSaldoOnline = async function initSaldoOnline(){
   cEl.value = moneyValueToDisplayTop(so.C6 || 0);
   iEl.value = moneyValueToDisplayTop(so.Infinity || 0);
   [dEl, cEl, iEl].forEach(function(el){ el.addEventListener('input', onMoneyInputTop); });
-  // Races a promise against a timeout so a stuck/never-settling call (or a plain thrown
-  // error anywhere in the chain) can never leave this button disabled forever.
-  function withTimeoutTop(promise, ms, timeoutCode){
-    return new Promise(function(resolve, reject){
-      var settled = false;
-      var timer = setTimeout(function(){
-        if (!settled) { settled = true; reject({ code: timeoutCode || 'timeout' }); }
-      }, ms);
-      Promise.resolve(promise).then(function(v){
-        if (!settled) { settled = true; clearTimeout(timer); resolve(v); }
-      }, function(err){
-        if (!settled) { settled = true; clearTimeout(timer); reject(err); }
-      });
-    });
+
+  var avisoEl = document.getElementById('saldo-online-modo-aviso');
+  if (!avisoEl){
+    avisoEl = document.createElement('div');
+    avisoEl.id = 'saldo-online-modo-aviso';
+    avisoEl.style.cssText = 'font-size:12px;color:var(--muted);margin:6px 0';
+    btn.parentNode.insertBefore(avisoEl, btn);
   }
+  avisoEl.textContent = souMesAtual
+    ? 'Salvando o saldo de hoje (ao vivo).'
+    : 'Mês selecionado: ' + mesLabelTop(ymSel) + '. Isso vai salvar como a foto histórica desse mês, não o saldo de hoje.';
+
   btn.addEventListener('click', async function(){
     btn.disabled = true;
     msgEl.textContent = 'Salvando…';
@@ -1391,10 +1399,24 @@ window.initSaldoOnline = async function initSaldoOnline(){
       Infinity: displayToNumberTop(iEl.value)
     };
     try{
-      var res = await window.sb.from('saldo_online').upsert({ id:1, dinheiro: novoSaldo.Dinheiro, c6: novoSaldo.C6, infinity: novoSaldo.Infinity });
-      if (res.error) throw res.error;
-      LANCAMENTOS.saldoOnline = novoSaldo;
+      if (souMesAtual){
+        var res = await window.sb.from('saldo_online').upsert({ id:1, dinheiro: novoSaldo.Dinheiro, c6: novoSaldo.C6, infinity: novoSaldo.Infinity });
+        if (res.error) throw res.error;
+        LANCAMENTOS.saldoOnline = novoSaldo;
+      } else {
+        var res2 = await window.sb.from('gerencial_mensal').upsert({
+          mes: ymSel,
+          saldo_online_dinheiro: novoSaldo.Dinheiro,
+          saldo_online_c6: novoSaldo.C6,
+          saldo_online_infinity: novoSaldo.Infinity
+        });
+        if (res2.error) throw res2.error;
+        window.gerencialSaldoOnlinePorMes = window.gerencialSaldoOnlinePorMes || {};
+        window.gerencialSaldoOnlinePorMes[ymSel] = { dinheiro: novoSaldo.Dinheiro, c6: novoSaldo.C6, infinity: novoSaldo.Infinity };
+      }
       msgEl.textContent = 'Salvo.';
+      if (window.renderDiaria) window.renderDiaria();
+      if (window.renderConciliacaoDias) window.renderConciliacaoDias();
       if (window.atualizarResumoFinanceiro) window.atualizarResumoFinanceiro();
     }catch(err){
       msgEl.textContent = 'Não consegui salvar agora. Confira a internet e tente de novo.';
