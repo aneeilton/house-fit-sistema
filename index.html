@@ -677,6 +677,7 @@ window.atualizarResumoFinanceiro = async function(){
       dados.anual_mensal = { meses: DATA.anual_socios.meses, totalRamon: DATA.anual_socios.totalRamon, totalAnai: DATA.anual_socios.totalAnai };
     }
     await sb.from('resumo_cache').update({ dados: dados, atualizado_em: new Date().toISOString() }).eq('id',1);
+    if (window.atualizarResumoGerencialTodos) window.atualizarResumoGerencialTodos();
   }catch(e){
     console.error('atualizarResumoFinanceiro falhou:', e);
     if (window.showToast) window.showToast('Salvo aqui, mas não consegui atualizar o resumo agora.', true);
@@ -3581,7 +3582,7 @@ window.initGerencial = async function initGerencial(){
           { nome:'Well Hub', receita:n(row.wellhub_receita), futuro:n(row.wellhub_futuro) }
         ],
         total_receita: c.totalAtivosReceita, total_futuro: c.totalAtivosFuturo,
-        despesas_pagas: n(row.despesas_pagas),
+        despesas_pagas: c.despesasReal,
         saldo: c.saldoPlanos,
         ramon: c.planosRamon, anai: c.planosAnai
       },
@@ -3615,6 +3616,7 @@ window.initGerencial = async function initGerencial(){
       return !res2.error;
     }catch(e){ return false; }
   }
+  window.atualizarResumoGerencialTodos = atualizarResumoGerencialTodos;
 
   dados = await carregarMes(mesSel);
   render();
