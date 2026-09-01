@@ -165,6 +165,7 @@
   .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
   .badge.good { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
   .badge.critical { background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
+  .badge.warning { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
   .badge svg { width: 12px; height: 12px; }
 
   .footnote { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
@@ -575,11 +576,20 @@ function onMoneyInputTop(ev){
   try { el.setSelectionRange(el.value.length, el.value.length); } catch(e){}
 }
 
-function computeOnlineTop(){
-  var so = LANCAMENTOS.saldoOnline;
-  if (!so) return EXTERNAL.confronto_online;
-  var dv = nD(so.Dinheiro), cv = nD(so.C6), iv = nD(so.Infinity);
-  return { Dinheiro: dv, C6: cv, Infinity: iv, total: dv + cv + iv };
+function computeOnlineTop(ym){
+  var hoje = todayISOTop().slice(0,7);
+  if (!ym || ym === hoje){
+    var so = LANCAMENTOS.saldoOnline;
+    if (!so) return EXTERNAL.confronto_online;
+    var dv = nD(so.Dinheiro), cv = nD(so.C6), iv = nD(so.Infinity);
+    return { Dinheiro: dv, C6: cv, Infinity: iv, total: dv + cv + iv };
+  }
+  var snap = (window.gerencialSaldoOnlinePorMes || {})[ym];
+  if (snap){
+    var dv2 = nD(snap.dinheiro), cv2 = nD(snap.c6), iv2 = nD(snap.infinity);
+    return { Dinheiro: dv2, C6: cv2, Infinity: iv2, total: dv2 + cv2 + iv2, historico: true };
+  }
+  return { Dinheiro: 0, C6: 0, Infinity: 0, total: 0, semDado: true };
 }
 
 function buildDiaria(ym){
@@ -645,7 +655,7 @@ function buildDiaria(ym){
     saldo_suplem_mes_anterior: EXTERNAL.saldo_suplem_mes_anterior,
     resumo_suplementos: resumo_suplementos, resumo_planos: resumo_planos, contas: contas,
     margem_suplementos: EXTERNAL.margem_suplementos, nextfit_planos: EXTERNAL.nextfit_planos,
-    confronto: { apurado: confronto_apurado, online: computeOnlineTop(), despesa: -despesas_total, compras: -compras_total, saldo_final_apurado: saldo_final_apurado }
+    confronto: { apurado: confronto_apurado, online: computeOnlineTop(ym), despesa: -despesas_total, compras: -compras_total, saldo_final_apurado: saldo_final_apurado }
   };
 }
 
@@ -1108,6 +1118,12 @@ function confrontoTable(containerId, confronto) {
   const c = document.getElementById(containerId);
   const diff = confronto.saldo_final_apurado - confronto.online.total;
   const ok = Math.abs(diff) < 1;
+  var avisoOnline = '';
+  if (confronto.online.semDado) {
+    avisoOnline = '<div style="margin-top:8px"><span class="badge warning">Sem saldo online salvo para este mês — feche a Gerencial daquele mês para guardar essa foto</span></div>';
+  } else if (confronto.online.historico) {
+    avisoOnline = '<div style="margin-top:8px"><span class="badge">Saldo online da foto salva no fechamento deste mês, não o de hoje</span></div>';
+  }
   c.innerHTML = `
     <table class="datatable">
       <thead><tr><th>Conta</th><th class="num">Apurado</th><th class="num">Online</th></tr></thead>
@@ -1122,8 +1138,9 @@ function confrontoTable(containerId, confronto) {
       </tbody>
     </table>
     <div style="margin-top:12px">
-      <span class="badge ${ok ? 'good' : 'critical'}">${ok ? 'Caixa batendo certo' : 'Diferença de ' + fmtBRL(Math.abs(diff))}</span>
+      <span class="badge ${confronto.online.semDado ? 'warning' : (ok ? 'good' : 'critical')}">${confronto.online.semDado ? 'Sem base de comparação' : (ok ? 'Caixa batendo certo' : 'Diferença de ' + fmtBRL(Math.abs(diff)))}</span>
     </div>
+    ${avisoOnline}
   `;
 }
 
@@ -3588,6 +3605,12 @@ window.initGerencial = async function initGerencial(){
       btnSalvar.disabled = true;
       var msg = document.getElementById('msg-gerencial');
       msg.textContent = 'Salvando…';
+      if (mesSel === mesAtual()){
+        var soAgora = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.saldoOnline) ? LANCAMENTOS.saldoOnline : {};
+        dados.saldo_online_dinheiro = n(soAgora.Dinheiro);
+        dados.saldo_online_c6 = n(soAgora.C6);
+        dados.saldo_online_infinity = n(soAgora.Infinity);
+      }
       var linha = Object.assign({ mes: mesSel }, dados);
       var res = await sb.from('gerencial_mensal').upsert(linha);
       btnSalvar.disabled = false;
@@ -3649,7 +3672,16 @@ window.initGerencial = async function initGerencial(){
       var rAll = await sb.from('gerencial_mensal').select('*');
       if (rAll.error) return false;
       var porMes = {};
-      (rAll.data||[]).forEach(function(row){ porMes[row.mes] = montarPacoteGerencial(row); });
+      var porMesSaldo = {};
+      (rAll.data||[]).forEach(function(row){
+        porMes[row.mes] = montarPacoteGerencial(row);
+        if (row.saldo_online_dinheiro != null || row.saldo_online_c6 != null || row.saldo_online_infinity != null){
+          porMesSaldo[row.mes] = { dinheiro: row.saldo_online_dinheiro, c6: row.saldo_online_c6, infinity: row.saldo_online_infinity };
+        }
+      });
+      window.gerencialSaldoOnlinePorMes = porMesSaldo;
+      if (window.renderDiaria) window.renderDiaria();
+      if (window.renderConciliacaoDias) window.renderConciliacaoDias();
       var atual = await sb.from('resumo_cache').select('dados').eq('id',1).single();
       if (atual.error) return false;
       var rdados = atual.data.dados || {};
