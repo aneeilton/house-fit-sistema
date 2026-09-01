@@ -3373,7 +3373,7 @@ window.initGerencial = async function initGerencial(){
     'fiado_a_vencer','fiado_vencido_mais60','fiado_vencido_menos60',
     'musc_receita','musc_futuro','aulas_receita','aulas_futuro','atend_receita','atend_futuro',
     'arecceb_receita','arecceb_futuro','totalpass_receita','totalpass_futuro','wellhub_receita','wellhub_futuro',
-    'despesas_pagas'
+    'despesas_pagas','nf_nexfitpay'
   ];
 
   function vazio(){
@@ -3404,6 +3404,17 @@ window.initGerencial = async function initGerencial(){
       .reduce(function(t,x){ return t + n(x.valor); }, 0);
   }
 
+  function notaFiscalAEmitir(ym, nexfitpayManual){
+    var listaPlanos = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.planos) ? LANCAMENTOS.planos : [];
+    var listaSup = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.suplementos) ? LANCAMENTOS.suplementos : [];
+    var doMes = listaPlanos.filter(function(x){ return String(x.data||'').slice(0,7) === ym; });
+    var doMesSup = listaSup.filter(function(x){ return String(x.data||'').slice(0,7) === ym; });
+    var infinity = doMes.reduce(function(t,x){ return t + n(x.credito) + n(x.debito); }, 0);
+    var nexfitpay = n(nexfitpayManual);
+    var suplemento = doMesSup.reduce(function(t,x){ return t + n(x.cartao); }, 0);
+    return { infinity: infinity, nexfitpay: nexfitpay, suplemento: suplemento, total: infinity + nexfitpay - suplemento };
+  }
+
   function calc(d, ymRef){
     var ym = ymRef || mesSel;
     var soma = n(d.crediario) + n(d.cartao) + n(d.dinheiro_pix);
@@ -3419,6 +3430,7 @@ window.initGerencial = async function initGerencial(){
     var totalAtivosFuturo = n(d.musc_futuro)+n(d.aulas_futuro)+n(d.atend_futuro)+n(d.arecceb_futuro)+n(d.totalpass_futuro)+n(d.wellhub_futuro);
     var receitasPlanos = totalAtivosReceita;
     var despesasReal = despesasRealDoMes(ym);
+    var nf = notaFiscalAEmitir(ym, d.nf_nexfitpay);
     var saldoPlanos = receitasPlanos - despesasReal;
     var planosRamon = saldoPlanos * 0.75, planosAnai = saldoPlanos * 0.25;
     var geralRamon = planosRamon + supRamon, geralAnai = planosAnai + supAnai;
@@ -3426,7 +3438,7 @@ window.initGerencial = async function initGerencial(){
       soma: soma, margemComR: margemComR, margemComP: margemComP, margemFinR: margemFinR, margemFinP: margemFinP,
       supRamon: supRamon, supAnai: supAnai, entradaReal: entradaReal, saldoConta: saldoConta, totalCrediario: totalCrediario,
       totalAtivosReceita: totalAtivosReceita, totalAtivosFuturo: totalAtivosFuturo,
-      receitasPlanos: receitasPlanos, despesasReal: despesasReal, saldoPlanos: saldoPlanos, planosRamon: planosRamon, planosAnai: planosAnai,
+      receitasPlanos: receitasPlanos, despesasReal: despesasReal, nf: nf, saldoPlanos: saldoPlanos, planosRamon: planosRamon, planosAnai: planosAnai,
       geralRamon: geralRamon, geralAnai: geralAnai, saldo_em_conta: saldoConta
     };
   }
@@ -3506,6 +3518,14 @@ window.initGerencial = async function initGerencial(){
     h += '<div class="mod-item"><span class="txt">25% Anai</span><span class="mod-tag">' + brl(c.planosAnai) + '</span></div>';
     h += '</div>';
 
+    h += '<div class="card"><h3>Nota fiscal a emitir em Planos</h3>';
+    h += '<div class="cardsub">O que passou por cartão (Infinity) e NexfitPay, menos o que já saiu com nota no sistema de suplementos — pelo cartão. A diferença é o que falta faturar em Planos.</div>';
+    h += '<div class="mod-item"><span class="txt">Infinity (crédito + débito, Planos)</span><span class="mod-tag">' + brl(c.nf.infinity) + '</span></div>';
+    h += campo('ger-nf-nexfitpay', 'NexfitPay (venda no cartão online — digite)', dados.nf_nexfitpay);
+    h += '<div class="mod-item"><span class="txt">Já faturado em Suplementos (cartão)</span><span class="mod-tag">-' + brl(c.nf.suplemento) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt"><b>Emitir nota em Planos</b></span><span class="mod-tag ok"><b>' + brl(c.nf.total) + '</b></span></div>';
+    h += '</div>';
+
     h += '<div class="card"><h3>Geral — divisão da sociedade</h3>';
     h += '<div class="kpis">';
     h += '<div class="kpi"><h4>75% Ramon</h4><div class="v">' + brl(c.geralRamon) + '</div></div>';
@@ -3532,7 +3552,7 @@ window.initGerencial = async function initGerencial(){
         musc_receita:'ger-musc-r', musc_futuro:'ger-musc-f', aulas_receita:'ger-aulas-r', aulas_futuro:'ger-aulas-f',
         atend_receita:'ger-atend-r', atend_futuro:'ger-atend-f', arecceb_receita:'ger-arecceb-r', arecceb_futuro:'ger-arecceb-f',
         totalpass_receita:'ger-totalpass-r', totalpass_futuro:'ger-totalpass-f', wellhub_receita:'ger-wellhub-r', wellhub_futuro:'ger-wellhub-f',
-        despesas_pagas:'ger-despesas'
+        despesas_pagas:'ger-despesas', nf_nexfitpay:'ger-nf-nexfitpay'
       };
       var el = document.getElementById(idMap[c2]);
       if (el) el.addEventListener('change', function(){
