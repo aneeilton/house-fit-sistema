@@ -685,7 +685,7 @@ window.atualizarResumoFinanceiro = async function(){
   var sb = window.sb;
   if (!sb) return;
   try{
-    var ym = todayISOTop().slice(0,7);
+    var ym = window.mesGlobal || todayISOTop().slice(0,7);
     var d = buildDiaria(ym);
     var c = d.confronto;
     var diferenca = c.saldo_final_apurado - c.online.total;
@@ -693,19 +693,33 @@ window.atualizarResumoFinanceiro = async function(){
     var dados = (atual.data && atual.data.dados) || {};
     dados.financeiro_mes = { receita: c.apurado.total, despesas_compras: -(c.despesa + c.compras), saldo: c.saldo_final_apurado };
     dados.conciliacao = { diferenca: Math.round(diferenca*100)/100, confere: Math.abs(diferenca) < 1 };
-    if (typeof DATA !== 'undefined' && DATA.contas_pagar){
-      dados.contas_pagar = { planejado: DATA.contas_pagar.total.planejado, realizado: DATA.contas_pagar.total.realizado };
-      dados.contas_pagar_detalhe = DATA.contas_pagar.grupos.map(function(gr){
+
+    // ---- histórico por mês: Contas a Pagar e Compras, para todo mês que já teve lançamento ----
+    var mesesComDados = {};
+    (LANCAMENTOS.despesas||[]).forEach(function(x){ if (x.data) mesesComDados[x.data.slice(0,7)] = true; });
+    (LANCAMENTOS.compras||[]).forEach(function(x){ if (x.data) mesesComDados[x.data.slice(0,7)] = true; });
+    mesesComDados[ym] = true;
+
+    var comprasPorMes = {}, contasPagarPorMes = {};
+    Object.keys(mesesComDados).forEach(function(ymX){
+      comprasPorMes[ymX] = (LANCAMENTOS.compras||[])
+        .filter(function(x){ return String(x.data||'').slice(0,7) === ymX; })
+        .map(function(x){ return { data: x.data, descricao: x.descricao, valor: x.valor }; })
+        .sort(function(a,b){ return String(a.data).localeCompare(String(b.data)); });
+      var cpX = buildContasPagar(ymX);
+      contasPagarPorMes[ymX] = cpX.grupos.map(function(gr){
         return {
           nome: gr.nome, planejado: gr.planejado, realizado: gr.realizado,
           itens: (gr.itens||[]).map(function(it){ return { nome: it.nome, planejado: it.planejado, realizado: it.realizado }; })
         };
       });
+    });
+    dados.compras_por_mes = comprasPorMes;
+    dados.contas_pagar_por_mes = contasPagarPorMes;
+
+    if (typeof DATA !== 'undefined' && DATA.contas_pagar){
+      dados.contas_pagar = { planejado: DATA.contas_pagar.total.planejado, realizado: DATA.contas_pagar.total.realizado };
     }
-    dados.compras_mes_lista = (LANCAMENTOS.compras||[])
-      .filter(function(x){ return String(x.data||'').slice(0,7) === ym; })
-      .map(function(x){ return { data: x.data, descricao: x.descricao, valor: x.valor }; })
-      .sort(function(a,b){ return String(a.data).localeCompare(String(b.data)); });
     if (typeof DATA !== 'undefined' && DATA.anual_socios){
       dados.anual_mensal = { meses: DATA.anual_socios.meses, totalRamon: DATA.anual_socios.totalRamon, totalAnai: DATA.anual_socios.totalAnai };
     }

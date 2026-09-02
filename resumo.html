@@ -489,7 +489,7 @@
       h += '<div class="setor-sub" style="margin-top:18px">Caixa do setor \u2014 o que sobra para pagar as compras do m\u00eas seguinte.</div>';
       h += '<div class="linha-dado"><span class="lbl">Saldo m\u00eas passado</span><span class="val">' + brl(gs.saldo_mes_passado) + '</span></div>';
       h += '<div class="linha-dado"><span class="lbl">Entrada real no caixa</span><span class="val">' + brl(gs.entrada_real) + '</span></div>';
-      h += '<a class="linha-dado linha-link" href="resumo-compras.html"><span class="lbl">Compras do m\u00eas</span><span class="val">' + saida(gs.compras_mes) + '</span></a>';
+      h += '<a class="linha-dado linha-link" href="resumo-compras.html?mes=' + mesEscolhido + '"><span class="lbl">Compras do m\u00eas</span><span class="val">' + saida(gs.compras_mes) + '</span></a>';
       h += '<div class="linha-dado"><span class="lbl">Ramon \u00b7 75%</span><span class="val">' + brl(gs.participacao_ramon) + '</span></div>';
       h += '<div class="linha-dado"><span class="lbl">Anai \u00b7 25%</span><span class="val">' + brl(gs.participacao_anai) + '</span></div>';
       h += '<div class="linha-final"><span class="lbl">Saldo em conta</span><span class="val ' + ((gs.saldo_em_conta||0)>=0?'pos':'neg') + '">' + brl(gs.saldo_em_conta) + '</span></div>';
@@ -503,7 +503,7 @@
       });
       h += '<tr class="total"><td>Total</td><td class="num">' + brl(gp.total_receita) + '</td></tr>';
       h += '</tbody></table>';
-      h += '<a class="linha-dado linha-link" style="margin-top:6px" href="resumo-despesas.html"><span class="lbl">Despesas pagas</span><span class="val">' + saida(gp.despesas_pagas) + '</span></a>';
+      h += '<a class="linha-dado linha-link" style="margin-top:6px" href="resumo-despesas.html?mes=' + mesEscolhido + '"><span class="lbl">Despesas pagas</span><span class="val">' + saida(gp.despesas_pagas) + '</span></a>';
       h += '<div class="linha-final"><span class="lbl">Lucro final Planos</span><span class="val ' + ((gp.saldo||0)>=0?'pos':'neg') + '">' + brl(gp.saldo) + '</span></div>';
       h += '</div>';
 
