@@ -663,7 +663,7 @@ function buildDiaria(ym){
     C6: resumo_suplementos.Pix + resumo_planos.Pix,
     Infinity: resumo_suplementos.Infinity + resumo_planos.Infinity
   };
-  confronto_apurado.total = confronto_apurado.Dinheiro + confronto_apurado.C6 + confronto_apurado.Infinity;
+  confronto_apurado.total = confronto_apurado.Dinheiro + confronto_apurado.C6 + confronto_apurado.Infinity - estornosPlanos;
   var saldo_final_apurado = confronto_apurado.total - despesas_total - compras_total;
 
   return {
