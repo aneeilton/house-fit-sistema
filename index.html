@@ -166,6 +166,14 @@
   .badge.good { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
   .badge.critical { background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
   .badge.warning { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
+
+  .escala-print { background:#fff; border-radius:10px; overflow:hidden; box-shadow: var(--card-shadow); margin-bottom:18px; }
+  .escala-print table { width:100%; border-collapse:collapse; }
+  .escala-print th.escala-titulo { background:#1F3B63; color:#fff; text-align:center; padding:10px; font-size:14px; letter-spacing:.03em; }
+  .escala-print thead.escala-sub th { background:#2C4E7D; color:#fff; font-size:12px; padding:8px 6px; text-align:center; }
+  .escala-print tbody td { padding:9px 6px; text-align:center; font-size:13px; background:#EAF2E4; border:1px solid #cfe0c6; }
+  .escala-print tbody td:first-child { background:#DCE6F1; font-weight:600; }
+  .escala-print .escala-vazio-print { padding:16px; text-align:center; color:var(--muted); font-size:13px; background:#fff; }
   .badge svg { width: 12px; height: 12px; }
 
   .footnote { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
@@ -465,6 +473,12 @@
         <h3>Confronto de caixa</h3>
         <div class="cardsub">Apurado (vendas − despesas − compras, suplementos + planos) x saldo online das contas</div>
         <div id="confronto-diaria"></div>
+      </div>
+
+      <div class="card">
+        <h3>Histórico de conferências</h3>
+        <div class="cardsub">Um registro permanente toda vez que você salva o saldo online — para consultar depois se bateu em conferências passadas.</div>
+        <div id="conciliacao-historico"></div>
       </div>
 
       <div class="card">
@@ -1255,6 +1269,30 @@ window.renderDiaria = function renderDiaria() {
 };
 renderDiaria();
 
+window.renderConciliacaoHistorico = async function(){
+  var el = document.getElementById('conciliacao-historico');
+  if (!el || !window.sb) return;
+  try{
+    var r = await window.sb.from('conciliacao_log').select('*').order('data', { ascending:false }).limit(20);
+    if (r.error || !r.data || !r.data.length){
+      el.innerHTML = '<div class="mod-vazio">Nenhuma conferência registrada ainda. Toque em "Salvar saldo online" para criar a primeira.</div>';
+      return;
+    }
+    var h = '<div class="scroll-table"><table class="datatable"><thead><tr><th>Quando</th><th>Mês</th><th class="num">Apurado</th><th class="num">Online</th><th class="num">Diferença</th><th>Bateu?</th></tr></thead><tbody>';
+    r.data.forEach(function(row){
+      var dt = new Date(row.data);
+      h += '<tr><td>' + dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) + '</td>';
+      h += '<td>' + row.mes + '</td>';
+      h += '<td class="num">' + fmtBRL(row.apurado) + '</td>';
+      h += '<td class="num">' + fmtBRL(row.online) + '</td>';
+      h += '<td class="num">' + fmtBRL(row.diferenca) + '</td>';
+      h += '<td><span class="badge ' + (row.bateu ? 'good' : 'critical') + '">' + (row.bateu ? 'Sim' : 'Não') + '</span></td></tr>';
+    });
+    h += '</tbody></table></div>';
+    el.innerHTML = h;
+  }catch(e){ /* best-effort */ }
+};
+
 // ================= MENSAL =================
 // ================= CONTAS A PAGAR =================
 window.renderContasPagar = function renderContasPagar() {
@@ -1420,6 +1458,19 @@ window.initSaldoOnline = async function initSaldoOnline(){
       }
       msgEl.textContent = 'Salvo.';
       if (window.renderDiaria) window.renderDiaria();
+      try{
+        var conf = DATA.diaria.confronto;
+        var diferencaLog = conf.saldo_final_apurado - conf.online.total;
+        await window.sb.from('conciliacao_log').insert({
+          id: 'cl' + Date.now() + Math.random().toString(36).slice(2,6),
+          mes: ymSel,
+          apurado: conf.saldo_final_apurado,
+          online: conf.online.total,
+          diferenca: Math.round(diferencaLog*100)/100,
+          bateu: Math.abs(diferencaLog) < 1
+        });
+        if (window.renderConciliacaoHistorico) window.renderConciliacaoHistorico();
+      }catch(eLog){ /* best-effort */ }
       if (window.renderConciliacaoDias) window.renderConciliacaoDias();
       if (window.atualizarResumoFinanceiro) window.atualizarResumoFinanceiro();
     }catch(err){
@@ -3019,8 +3070,12 @@ window.initMenu = function initMenu(){
       { v:'gerencial', t:'Gerencial', d:'Margem, saldo e divisão da sociedade', n:'', cls:'' },
       { v:'clientes', t:'Clientes', d:'Elogios e reclamações da pesquisa de atendimento', n:'', cls:'' },
       { v:'escala', t:'Escala', d:'Feriados e rodízio de sábados',
-        n: (window._escalaCardInfo ? (window._escalaCardInfo.definido ? 'em dia' : window._escalaCardInfo.nome + ' em ' + window._escalaCardInfo.dias + 'd') : (window._escalaCardInfo === null ? 'sem feriado próximo' : '—')),
-        cls: (window._escalaCardInfo && !window._escalaCardInfo.definido) ? 'alerta' : 'ok' },
+        n: (window._escalaCardInfo
+              ? (window._escalaCardInfo.checklistPendente ? 'montar escala do mês'
+                 : (window._escalaCardInfo.feriado && !window._escalaCardInfo.feriado.definido ? window._escalaCardInfo.feriado.nome + ' em ' + window._escalaCardInfo.feriado.dias + 'd'
+                    : 'em dia'))
+              : '—'),
+        cls: (window._escalaCardInfo && (window._escalaCardInfo.checklistPendente || (window._escalaCardInfo.feriado && !window._escalaCardInfo.feriado.definido))) ? 'alerta' : 'ok' },
       { v:'conciliacao', t:'Conciliação', d:'Confronto do online com o lançado', n: conc.txt, cls: conc.cls },
       { v:'contaspagar', t:'Contas a pagar', d:'Fixas, parceiros e impostos', n:'', cls:'' },
       { v:'anual', t:'Anual', d:'Resultado do ano e divisão por sócio', n:'', cls:'' }
@@ -3074,7 +3129,7 @@ window.initMenu = function initMenu(){
 
   if (window.proximoFeriadoPendente){
     window.proximoFeriadoPendente().then(function(info){
-      window._escalaCardInfo = info === null ? null : info;
+      window._escalaCardInfo = info;
       paint();
     }).catch(function(){});
   }
@@ -3144,6 +3199,7 @@ window.initMenu = function initMenu(){
       if (window.renderContasPagar) window.renderContasPagar();
       if (window.renderConciliacaoDias) window.renderConciliacaoDias();
       if (window.renderAnual) window.renderAnual();
+      if (window.renderConciliacaoHistorico) window.renderConciliacaoHistorico();
       if (window.atualizarResumoFinanceiro) window.atualizarResumoFinanceiro();
       await window.initModulos();
       await window.initSatisfacao();
@@ -3960,6 +4016,29 @@ window.initEscala = async function initEscala(){
     return { feriados: sugestaoFeriados(ym), sabados: sugestaoSabados(ym), salvo:false };
   }
 
+  function tabelaImpressao(){
+    var h = '<div class="escala-print">';
+    h += '<table><thead><tr><th class="escala-titulo" colspan="3">Escala Feriados — ' + esc(mesLabel(mesSel)) + '</th></tr>';
+    h += '<tr class="escala-sub"><th>Data</th><th>Horário</th><th>Trabalha</th></tr></thead><tbody>';
+    if (!dadosMes.feriados.length){
+      h += '</tbody></table><div class="escala-vazio-print">Sem feriado neste mês.</div><table><tbody>';
+    } else {
+      dadosMes.feriados.forEach(function(f){
+        h += '<tr><td>' + ddmmFromISO(f.data) + '<br>' + diaSemanaAbrev(f.data) + '</td><td>' + esc(f.horario || (f.trabalha ? '' : 'Fechado')) + '</td><td>' + esc(f.trabalha || 'Folga') + '</td></tr>';
+      });
+    }
+    h += '</tbody></table></div>';
+
+    h += '<div class="escala-print">';
+    h += '<table><thead><tr><th class="escala-titulo" colspan="3">Folgas Sábados</th></tr>';
+    h += '<tr class="escala-sub"><th>Data</th><th>Recepção</th><th>Salão</th></tr></thead><tbody>';
+    dadosMes.sabados.forEach(function(s){
+      h += '<tr><td>' + ddmmFromISO(s.data) + '<br>Sab</td><td>' + esc(s.recepcao || '—') + '</td><td>' + esc(s.salao || '—') + '</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    return h;
+  }
+
   function render(){
     var h = '';
     h += '<div class="mod-bar"><span id="msg-escala" class="mod-msg"></span></div>';
@@ -3967,6 +4046,9 @@ window.initEscala = async function initEscala(){
     if (!dadosMes.salvo){
       h += '<div class="mod-aviso alerta">Essa é uma sugestão automática, ainda não salva. Confira e toque em "Salvar escala do mês".</div>';
     }
+
+    h += '<div class="cardsub" style="margin:14px 0 4px">Print pronto para mandar no grupo da equipe:</div>';
+    h += tabelaImpressao();
 
     h += '<div class="card"><h3>Escala Feriados</h3>';
     h += '<div class="cardsub">Nataly e Usiane nunca aparecem como opção — não trabalham em feriado, por regra.</div>';
@@ -4067,21 +4149,38 @@ window.initEscala = async function initEscala(){
   // ---- indicador para o card do Início: próximo feriado sem escala definida ----
   window.proximoFeriadoPendente = async function(){
     var hoje = new Date(); hoje.setHours(0,0,0,0);
+    var mesAtualStr = hoje.toISOString().slice(0,7);
+
+    var checklistPendente = false;
+    try{
+      var itemR = await sb.from('checklist_itens').select('id').eq('titulo','Montar escala do mês').maybeSingle();
+      if (itemR.data){
+        var execR = await sb.from('checklist_exec').select('id').eq('item_id', itemR.data.id).eq('ciclo', mesAtualStr).maybeSingle();
+        checklistPendente = !execR.data;
+      }
+    }catch(e){}
+
     var candidatos = feriadosNacionaisDoAno(hoje.getFullYear()).concat(feriadosNacionaisDoAno(hoje.getFullYear()+1))
       .filter(function(f){ return new Date(f.data+'T00:00:00') >= hoje; })
       .sort(function(a,b){ return a.data.localeCompare(b.data); });
-    if (!candidatos.length) return null;
-    var prox = candidatos[0];
-    var dias = Math.round((new Date(prox.data+'T00:00:00') - hoje) / 86400000);
-    if (dias > 15) return null;
-    var ym = prox.data.slice(0,7);
-    var r = await sb.from('escala_mensal').select('feriados').eq('mes', ym).maybeSingle();
-    var definido = false;
-    if (r.data && r.data.feriados){
-      var achou = r.data.feriados.filter(function(f){ return f.data === prox.data; })[0];
-      definido = !!(achou && (achou.trabalha || achou.fechado));
+
+    var feriadoInfo = null;
+    if (candidatos.length){
+      var prox = candidatos[0];
+      var dias = Math.round((new Date(prox.data+'T00:00:00') - hoje) / 86400000);
+      if (dias <= 15){
+        var ym = prox.data.slice(0,7);
+        var r = await sb.from('escala_mensal').select('feriados').eq('mes', ym).maybeSingle();
+        var definido = false;
+        if (r.data && r.data.feriados){
+          var achou = r.data.feriados.filter(function(f){ return f.data === prox.data; })[0];
+          definido = !!(achou && (achou.trabalha || achou.fechado));
+        }
+        feriadoInfo = { nome: prox.nome, data: prox.data, dias: dias, definido: definido };
+      }
     }
-    return { nome: prox.nome, data: prox.data, dias: dias, definido: definido };
+
+    return { feriado: feriadoInfo, checklistPendente: checklistPendente };
   };
 };
 
