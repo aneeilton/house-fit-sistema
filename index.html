@@ -412,6 +412,7 @@
       <button class="tab" data-view="satisfacao">Satisfação</button>
       <button class="tab" data-view="gerencial">Gerencial</button>
       <button class="tab" data-view="clientes">Clientes</button>
+      <button class="tab" data-view="escala">Escala</button>
     </div>
 
     <!-- INICIO -->
@@ -501,6 +502,9 @@
 
     <!-- CLIENTES -->
     <div class="view" id="view-clientes"><div id="mod-clientes"></div></div>
+
+    <!-- ESCALA -->
+    <div class="view" id="view-escala"><div id="mod-escala"></div></div>
 
     <div class="footnote" style="margin-top:18px">
       Fonte: planilha "Gestão Academia.xlsx" (Google Drive / notebook do usuário). Atualização automática diária pausada — dados alimentados manualmente pela aba Lançamento.
@@ -3014,6 +3018,9 @@ window.initMenu = function initMenu(){
         cls: (window.satisfacaoResumoAtual && window.satisfacaoResumoAtual.naoLidas) ? 'alerta' : 'ok' },
       { v:'gerencial', t:'Gerencial', d:'Margem, saldo e divisão da sociedade', n:'', cls:'' },
       { v:'clientes', t:'Clientes', d:'Elogios e reclamações da pesquisa de atendimento', n:'', cls:'' },
+      { v:'escala', t:'Escala', d:'Feriados e rodízio de sábados',
+        n: (window._escalaCardInfo ? (window._escalaCardInfo.definido ? 'em dia' : window._escalaCardInfo.nome + ' em ' + window._escalaCardInfo.dias + 'd') : (window._escalaCardInfo === null ? 'sem feriado próximo' : '—')),
+        cls: (window._escalaCardInfo && !window._escalaCardInfo.definido) ? 'alerta' : 'ok' },
       { v:'conciliacao', t:'Conciliação', d:'Confronto do online com o lançado', n: conc.txt, cls: conc.cls },
       { v:'contaspagar', t:'Contas a pagar', d:'Fixas, parceiros e impostos', n:'', cls:'' },
       { v:'anual', t:'Anual', d:'Resultado do ano e divisão por sócio', n:'', cls:'' }
@@ -3064,6 +3071,13 @@ window.initMenu = function initMenu(){
   montarVoltar();
 
   paint();
+
+  if (window.proximoFeriadoPendente){
+    window.proximoFeriadoPendente().then(function(info){
+      window._escalaCardInfo = info === null ? null : info;
+      paint();
+    }).catch(function(){});
+  }
 };
 
 
@@ -3116,6 +3130,7 @@ window.initMenu = function initMenu(){
       if (window.renderConciliacaoDias) window.renderConciliacaoDias();
       if (window.renderAnual) window.renderAnual();
       if (window.setMesGerencial) await window.setMesGerencial(window.mesGlobal);
+      if (window.setMesEscala) await window.setMesEscala(window.mesGlobal);
       if (window.atualizarResumoFinanceiro) window.atualizarResumoFinanceiro();
     });
   }
@@ -3134,6 +3149,7 @@ window.initMenu = function initMenu(){
       await window.initSatisfacao();
       await window.initGerencial();
       await window.initClientes();
+      await window.initEscala();
       if (window.initMenu) window.initMenu();
       configurarSeletorMestre();
     }catch(e){
@@ -3841,6 +3857,232 @@ window.initClientes = async function initClientes(){
   }
 
   render();
+};
+
+window.initEscala = async function initEscala(){
+  var box = document.getElementById('mod-escala');
+  if (!box) return;
+  var sb = window.sb;
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function n(v){ var x = parseFloat(v); return isNaN(x) ? 0 : x; }
+  function pad2(x){ return String(x).padStart(2,'0'); }
+  function isoData(y,m,d){ return y + '-' + pad2(m) + '-' + pad2(d); }
+  function ddmmFromISO(iso){ var p = iso.split('-'); return p[2] + '/' + p[1]; }
+  function diaSemanaAbrev(iso){
+    var dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
+    return dias[new Date(iso + 'T00:00:00').getDay()];
+  }
+  function mesLabel(ym){
+    var MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    var p = ym.split('-');
+    return MESES_PT[parseInt(p[1],10)-1] + '/' + p[0];
+  }
+
+  function calcularPascoa(ano){
+    var a = ano % 19, b = Math.floor(ano/100), c = ano % 100;
+    var d = Math.floor(b/4), e = b % 4;
+    var f = Math.floor((b+8)/25);
+    var g = Math.floor((b-f+1)/3);
+    var h = (19*a + b - d - g + 15) % 30;
+    var i = Math.floor(c/4), k = c % 4;
+    var l = (32 + 2*e + 2*i - h - k) % 7;
+    var m = Math.floor((a + 11*h + 22*l)/451);
+    var mes = Math.floor((h + l - 7*m + 114)/31);
+    var dia = ((h + l - 7*m + 114) % 31) + 1;
+    return new Date(ano, mes-1, dia);
+  }
+  function somaDias(data, dias){ var d = new Date(data); d.setDate(d.getDate()+dias); return d; }
+  function isoDeDate(d){ return isoData(d.getFullYear(), d.getMonth()+1, d.getDate()); }
+
+  function feriadosNacionaisDoAno(ano){
+    var pascoa = calcularPascoa(ano);
+    var lista = [
+      { data: isoData(ano,1,1),  nome:'Confraternização Universal', tipo:'nacional' },
+      { data: isoDeDate(somaDias(pascoa,-48)), nome:'Carnaval (segunda)', tipo:'facultativo' },
+      { data: isoDeDate(somaDias(pascoa,-47)), nome:'Carnaval (terça)', tipo:'facultativo' },
+      { data: isoDeDate(somaDias(pascoa,-2)),  nome:'Sexta-feira Santa', tipo:'nacional' },
+      { data: isoData(ano,4,21), nome:'Tiradentes', tipo:'nacional' },
+      { data: isoData(ano,5,1),  nome:'Dia do Trabalho', tipo:'nacional' },
+      { data: isoDeDate(somaDias(pascoa,60)),  nome:'Corpus Christi', tipo:'facultativo' },
+      { data: isoData(ano,9,7),  nome:'Independência do Brasil', tipo:'nacional' },
+      { data: isoData(ano,10,12),nome:'Nossa Senhora Aparecida', tipo:'nacional' },
+      { data: isoData(ano,11,2), nome:'Finados', tipo:'nacional' },
+      { data: isoData(ano,11,15),nome:'Proclamação da República', tipo:'nacional' },
+      { data: isoData(ano,11,20),nome:'Dia de Zumbi e da Consciência Negra', tipo:'nacional' },
+      { data: isoData(ano,12,25),nome:'Natal', tipo:'nacional' }
+    ];
+    return lista;
+  }
+
+  function sabadosDoMes(ym){
+    var p = ym.split('-'); var ano = parseInt(p[0],10), mes = parseInt(p[1],10);
+    var diasNoMes = new Date(ano, mes, 0).getDate();
+    var lista = [];
+    for (var d = 1; d <= diasNoMes; d++){
+      var iso = isoData(ano, mes, d);
+      if (new Date(iso+'T00:00:00').getDay() === 6) lista.push(iso);
+    }
+    return lista;
+  }
+
+  var config = null;
+  var rConfig = await sb.from('escala_config').select('*').eq('id',1).maybeSingle();
+  config = rConfig.data || { ciclo_sabado: [], personal_feriado_bloqueado: [] };
+
+  var colaboradores = ((typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.colaboradores) ? LANCAMENTOS.colaboradores : [])
+    .map(function(c){ return c.nome; })
+    .filter(function(nome){ return ['Priscila','Ramon','Taila'].indexOf(nome) === -1; });
+  var opcoesFeriado = colaboradores.filter(function(nome){ return config.personal_feriado_bloqueado.indexOf(nome) === -1; });
+
+  var mesSel = window.mesGlobal || (new Date().toISOString().slice(0,7));
+  var dadosMes = null;
+
+  function sugestaoFeriados(ym){
+    var ano = parseInt(ym.split('-')[0],10);
+    var todos = feriadosNacionaisDoAno(ano).concat(feriadosNacionaisDoAno(ano+1)).concat(feriadosNacionaisDoAno(ano-1));
+    return todos.filter(function(f){ return f.data.slice(0,7) === ym; })
+      .sort(function(a,b){ return a.data.localeCompare(b.data); })
+      .map(function(f){ return { data: f.data, nome: f.nome, tipo: f.tipo, horario:'', trabalha:'', fechado:false }; });
+  }
+
+  function sugestaoSabados(ym){
+    var sabs = sabadosDoMes(ym);
+    return sabs.map(function(iso, idx){
+      var ciclo = config.ciclo_sabado.length ? config.ciclo_sabado[idx % config.ciclo_sabado.length] : {recepcao:'',personal:''};
+      return { data: iso, recepcao: ciclo.recepcao || '', salao: ciclo.personal || '' };
+    });
+  }
+
+  async function carregarMes(ym){
+    var r = await sb.from('escala_mensal').select('*').eq('mes', ym).maybeSingle();
+    if (r.data) return { feriados: r.data.feriados || [], sabados: r.data.sabados || [], salvo:true };
+    return { feriados: sugestaoFeriados(ym), sabados: sugestaoSabados(ym), salvo:false };
+  }
+
+  function render(){
+    var h = '';
+    h += '<div class="mod-bar"><span id="msg-escala" class="mod-msg"></span></div>';
+    h += '<div class="cardsub" style="margin:0 0 10px">Mês em uso: ' + mesLabel(mesSel) + ' — troque no seletor do topo da página.</div>';
+    if (!dadosMes.salvo){
+      h += '<div class="mod-aviso alerta">Essa é uma sugestão automática, ainda não salva. Confira e toque em "Salvar escala do mês".</div>';
+    }
+
+    h += '<div class="card"><h3>Escala Feriados</h3>';
+    h += '<div class="cardsub">Nataly e Usiane nunca aparecem como opção — não trabalham em feriado, por regra.</div>';
+    dadosMes.feriados.forEach(function(f, idx){
+      h += '<div class="mod-item" style="flex-wrap:wrap;gap:8px">';
+      h += '<span class="txt" style="flex:1 1 100%"><b>' + ddmmFromISO(f.data) + '</b> · ' + diaSemanaAbrev(f.data) + ' · ' + esc(f.nome) + (f.tipo==='facultativo' ? ' <span class="mod-msg">(ponto facultativo)</span>' : '') + '</span>';
+      h += '<input class="mod-campo" type="text" data-fer-horario="' + idx + '" placeholder="Horário (ex: 05:00 às 12:00)" value="' + esc(f.horario) + '" style="flex:1;min-width:150px">';
+      h += '<select class="mod-campo" data-fer-trabalha="' + idx + '" style="flex:1;min-width:130px">';
+      h += '<option value="">Fechado / ninguém</option>';
+      opcoesFeriado.forEach(function(nomeOp){
+        h += '<option value="' + esc(nomeOp) + '"' + (f.trabalha===nomeOp?' selected':'') + '>' + esc(nomeOp) + '</option>';
+      });
+      h += '<option value="Todos"' + (f.trabalha==='Todos'?' selected':'') + '>Todos</option>';
+      h += '</select>';
+      h += '<button class="mod-mini" data-fer-remover="' + idx + '">remover</button>';
+      h += '</div>';
+    });
+    h += '<div class="mod-linha" style="margin-top:10px">';
+    h += '<input class="mod-campo" type="text" id="esc-fer-data" placeholder="DD/MM" style="max-width:90px">';
+    h += '<input class="mod-campo" type="text" id="esc-fer-nome" placeholder="Nome do feriado (municipal etc.)" style="flex:1;min-width:160px">';
+    h += '<button class="btn-dash" id="esc-fer-add">Adicionar feriado</button>';
+    h += '</div></div>';
+
+    h += '<div class="card"><h3>Folgas Sábados</h3>';
+    h += '<div class="cardsub">Rodízio sugerido automaticamente — pode trocar qualquer sábado na mão.</div>';
+    dadosMes.sabados.forEach(function(s, idx){
+      h += '<div class="mod-item" style="flex-wrap:wrap;gap:8px">';
+      h += '<span class="txt" style="flex:1 1 100%"><b>' + ddmmFromISO(s.data) + '</b> · Sab</span>';
+      h += '<div style="flex:1;min-width:130px"><label class="mod-msg">Recepção</label>';
+      h += '<select class="mod-campo" data-sab-recepcao="' + idx + '">';
+      h += '<option value="">—</option>';
+      colaboradores.forEach(function(nomeOp){
+        h += '<option value="' + esc(nomeOp) + '"' + (s.recepcao===nomeOp?' selected':'') + '>' + esc(nomeOp) + '</option>';
+      });
+      h += '</select></div>';
+      h += '<div style="flex:1;min-width:130px"><label class="mod-msg">Salão</label>';
+      h += '<select class="mod-campo" data-sab-salao="' + idx + '">';
+      h += '<option value="">—</option>';
+      colaboradores.forEach(function(nomeOp){
+        h += '<option value="' + esc(nomeOp) + '"' + (s.salao===nomeOp?' selected':'') + '>' + esc(nomeOp) + '</option>';
+      });
+      h += '</select></div>';
+      h += '</div>';
+    });
+    h += '</div>';
+
+    h += '<div class="mod-linha" style="margin:14px 0 30px"><button class="btn-dash" id="esc-salvar">Salvar escala do mês</button></div>';
+
+    box.innerHTML = h;
+
+    box.querySelectorAll('[data-fer-horario]').forEach(function(el){
+      el.addEventListener('change', function(){ dadosMes.feriados[+el.dataset.ferHorario].horario = el.value; });
+    });
+    box.querySelectorAll('[data-fer-trabalha]').forEach(function(el){
+      el.addEventListener('change', function(){ dadosMes.feriados[+el.dataset.ferTrabalha].trabalha = el.value; });
+    });
+    box.querySelectorAll('[data-fer-remover]').forEach(function(el){
+      el.addEventListener('click', function(){ dadosMes.feriados.splice(+el.dataset.ferRemover, 1); render(); });
+    });
+    box.querySelectorAll('[data-sab-recepcao]').forEach(function(el){
+      el.addEventListener('change', function(){ dadosMes.sabados[+el.dataset.sabRecepcao].recepcao = el.value; });
+    });
+    box.querySelectorAll('[data-sab-salao]').forEach(function(el){
+      el.addEventListener('change', function(){ dadosMes.sabados[+el.dataset.sabSalao].salao = el.value; });
+    });
+
+    var btnAdd = document.getElementById('esc-fer-add');
+    if (btnAdd) btnAdd.addEventListener('click', function(){
+      var ddmm = document.getElementById('esc-fer-data').value.trim();
+      var nome = document.getElementById('esc-fer-nome').value.trim();
+      var m = /^(\d{2})\/(\d{2})$/.exec(ddmm);
+      if (!m || !nome){ document.getElementById('msg-escala').textContent = 'Preencha data (DD/MM) e nome do feriado.'; return; }
+      var iso = mesSel.slice(0,4) + '-' + m[2] + '-' + m[1];
+      dadosMes.feriados.push({ data: iso, nome: nome, tipo:'municipal', horario:'', trabalha:'', fechado:false });
+      dadosMes.feriados.sort(function(a,b){ return a.data.localeCompare(b.data); });
+      render();
+    });
+
+    var btnSalvar = document.getElementById('esc-salvar');
+    if (btnSalvar) btnSalvar.addEventListener('click', async function(){
+      btnSalvar.disabled = true;
+      var msg = document.getElementById('msg-escala');
+      msg.textContent = 'Salvando…';
+      var res = await sb.from('escala_mensal').upsert({ mes: mesSel, feriados: dadosMes.feriados, sabados: dadosMes.sabados, atualizado_em: new Date().toISOString() });
+      btnSalvar.disabled = false;
+      if (res.error){ msg.textContent = 'Não consegui salvar — tenta de novo.'; return; }
+      dadosMes.salvo = true;
+      msg.textContent = 'Salvo.';
+      render();
+    });
+  }
+
+  dadosMes = await carregarMes(mesSel);
+  render();
+
+  window.setMesEscala = async function(ym){ mesSel = ym; dadosMes = await carregarMes(mesSel); render(); };
+
+  // ---- indicador para o card do Início: próximo feriado sem escala definida ----
+  window.proximoFeriadoPendente = async function(){
+    var hoje = new Date(); hoje.setHours(0,0,0,0);
+    var candidatos = feriadosNacionaisDoAno(hoje.getFullYear()).concat(feriadosNacionaisDoAno(hoje.getFullYear()+1))
+      .filter(function(f){ return new Date(f.data+'T00:00:00') >= hoje; })
+      .sort(function(a,b){ return a.data.localeCompare(b.data); });
+    if (!candidatos.length) return null;
+    var prox = candidatos[0];
+    var dias = Math.round((new Date(prox.data+'T00:00:00') - hoje) / 86400000);
+    if (dias > 15) return null;
+    var ym = prox.data.slice(0,7);
+    var r = await sb.from('escala_mensal').select('feriados').eq('mes', ym).maybeSingle();
+    var definido = false;
+    if (r.data && r.data.feriados){
+      var achou = r.data.feriados.filter(function(f){ return f.data === prox.data; })[0];
+      definido = !!(achou && (achou.trabalha || achou.fechado));
+    }
+    return { nome: prox.nome, data: prox.data, dias: dias, definido: definido };
+  };
 };
 
 </script></body></html>
