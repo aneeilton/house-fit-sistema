@@ -1433,7 +1433,9 @@ window.initSaldoOnline = async function initSaldoOnline(){
   dEl.value = moneyValueToDisplayTop(so.Dinheiro || 0);
   cEl.value = moneyValueToDisplayTop(so.C6 || 0);
   iEl.value = moneyValueToDisplayTop(so.Infinity || 0);
-  [dEl, cEl, iEl].forEach(function(el){ el.addEventListener('input', onMoneyInputTop); });
+  if (!dEl.dataset.wired){
+    [dEl, cEl, iEl].forEach(function(el){ el.addEventListener('input', onMoneyInputTop); el.dataset.wired = '1'; });
+  }
 
   var avisoEl = document.getElementById('saldo-online-modo-aviso');
   if (!avisoEl){
@@ -1446,7 +1448,12 @@ window.initSaldoOnline = async function initSaldoOnline(){
     ? 'Salvando o saldo de hoje (ao vivo).'
     : 'Mês selecionado: ' + mesLabelTop(ymSel) + '. Isso vai salvar como a foto histórica desse mês, não o saldo de hoje.';
 
+  if (btn.dataset.wired) return;
+  btn.dataset.wired = '1';
   btn.addEventListener('click', async function(){
+    var hojeClick = todayISOTop().slice(0,7);
+    var ymSelClick = window.mesGlobal || hojeClick;
+    var souMesAtualClick = (ymSelClick === hojeClick);
     btn.disabled = true;
     msgEl.textContent = 'Salvando…';
     var novoSaldo = {
@@ -1455,20 +1462,20 @@ window.initSaldoOnline = async function initSaldoOnline(){
       Infinity: displayToNumberTop(iEl.value)
     };
     try{
-      if (souMesAtual){
+      if (souMesAtualClick){
         var res = await window.sb.from('saldo_online').upsert({ id:1, dinheiro: novoSaldo.Dinheiro, c6: novoSaldo.C6, infinity: novoSaldo.Infinity });
         if (res.error) throw res.error;
         LANCAMENTOS.saldoOnline = novoSaldo;
       } else {
         var res2 = await window.sb.from('gerencial_mensal').upsert({
-          mes: ymSel,
+          mes: ymSelClick,
           saldo_online_dinheiro: novoSaldo.Dinheiro,
           saldo_online_c6: novoSaldo.C6,
           saldo_online_infinity: novoSaldo.Infinity
         });
         if (res2.error) throw res2.error;
         window.gerencialSaldoOnlinePorMes = window.gerencialSaldoOnlinePorMes || {};
-        window.gerencialSaldoOnlinePorMes[ymSel] = { dinheiro: novoSaldo.Dinheiro, c6: novoSaldo.C6, infinity: novoSaldo.Infinity };
+        window.gerencialSaldoOnlinePorMes[ymSelClick] = { dinheiro: novoSaldo.Dinheiro, c6: novoSaldo.C6, infinity: novoSaldo.Infinity };
       }
       msgEl.textContent = 'Salvo.';
       if (window.renderDiaria) window.renderDiaria();
@@ -1477,7 +1484,7 @@ window.initSaldoOnline = async function initSaldoOnline(){
         var diferencaLog = conf.saldo_final_apurado - conf.online.total;
         await window.sb.from('conciliacao_log').insert({
           id: 'cl' + Date.now() + Math.random().toString(36).slice(2,6),
-          mes: ymSel,
+          mes: ymSelClick,
           apurado: conf.saldo_final_apurado,
           online: conf.online.total,
           diferenca: Math.round(diferencaLog*100)/100,
