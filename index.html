@@ -166,6 +166,7 @@
   .badge.good { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
   .badge.critical { background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
   .badge.warning { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
+  .card-compromissos { border-top: 4px solid #C2410C; }
 
   .escala-print { background:#fff; border-radius:10px; overflow:hidden; box-shadow: var(--card-shadow); margin-bottom:18px; }
   .escala-print table { width:100%; border-collapse:collapse; }
@@ -858,6 +859,28 @@ function buildAnualSocios(diaria, refMes){
       }
     };
   });
+
+  // Meses fechados na Gerencial (Ago/2026 em diante) entram aqui automaticamente — nunca
+  // precisam mais ser copiados a mão para ANUAL_SOCIOS. Só entra o que NÃO for o mês
+  // corrente em aberto (esse continua de fora, pela mesma regra de sempre).
+  var hojeYm = todayISOTop().slice(0,7);
+  var mesesEstaticos = {};
+  meses.forEach(function(m){ mesesEstaticos[m.mes] = true; });
+  var gerPorMes = window.gerencialPorMesCompleto || {};
+  Object.keys(gerPorMes).sort().forEach(function(ym){
+    if (ym === hojeYm) return;
+    var label = mesLabelTop(ym);
+    if (mesesEstaticos[label]) return;
+    var g = gerPorMes[ym];
+    var supSaldoG = (g.suplementos && g.suplementos.margem_final_rs) || 0;
+    var planoSaldoG = (g.planos && g.planos.saldo) || 0;
+    meses.push({
+      mes: label,
+      planos: { saldo: planoSaldoG, ramon: round2(planoSaldoG * 0.75), anai: round2(planoSaldoG * 0.25) },
+      suplementos: { saldo: supSaldoG, ramon: round2(supSaldoG * 0.75), anai: round2(supSaldoG * 0.25) }
+    });
+  });
+
   var planoSaldo = diaria.contas.planos.saldo;
   var supSaldoLive = diaria.contas.suplementos.saldo;
   // O mês corrente NÃO entra na tabela enquanto estiver aberto: o saldo de suplementos aqui é
@@ -3102,7 +3125,28 @@ window.initMenu = function initMenu(){
       { v:'anual', t:'Anual', d:'Resultado do ano e divisão por sócio', n:'', cls:'' }
     ];
 
-    var h = '<div class="card"><h3>Gestão House Fit</h3>';
+    var h = '';
+    var compr = window._compromissosHoje || [];
+    var hojeBR = (function(){ var p = hoje().split('-'); return p[2]+'/'+p[1]; })();
+    h += '<div class="card card-compromissos"><h3>Compromissos de hoje — ' + hojeBR + '</h3>';
+    h += '<div id="compromissos-lista">';
+    if (!compr.length){
+      h += '<div class="mod-vazio">Nada marcado para hoje.</div>';
+    } else {
+      compr.slice().sort(function(a,b){ return (a.hora||'').localeCompare(b.hora||''); }).forEach(function(c){
+        h += '<div class="mod-item"><span class="txt"' + (c.feito ? ' style="text-decoration:line-through;color:var(--muted)"' : '') + '">' + (c.hora ? '<b>' + c.hora + '</b> — ' : '') + c.texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>';
+        h += '<button class="mod-mini" data-compr-toggle="' + c.id + '">' + (c.feito ? 'reabrir' : 'feito') + '</button>';
+        h += '<button class="mod-mini" data-compr-del="' + c.id + '">apagar</button></div>';
+      });
+    }
+    h += '</div>';
+    h += '<div class="mod-linha" style="margin-top:10px">';
+    h += '<input class="mod-campo" id="compr-hora" type="text" placeholder="Hora" style="max-width:80px">';
+    h += '<input class="mod-campo" id="compr-texto" type="text" placeholder="Novo compromisso de hoje">';
+    h += '<button class="btn-dash" id="compr-add">Adicionar</button>';
+    h += '</div></div>';
+
+    h += '<div class="card"><h3>Gestão House Fit</h3>';
     h += '<div class="cardsub">Escolha por onde começar. Os números são do ciclo atual.</div>';
     h += '<div class="menu-grid">';
     cards.forEach(function(c){
@@ -3121,6 +3165,35 @@ window.initMenu = function initMenu(){
     if (!b) return;
     var alvo = document.querySelector('.tab[data-view="' + b.getAttribute('data-goto') + '"]');
     if (alvo){ alvo.click(); window.scrollTo(0,0); }
+  });
+
+  box.addEventListener('click', async function(e){
+    var t = e.target;
+    if (t.id === 'compr-add'){
+      var texto = document.getElementById('compr-texto').value.trim();
+      var horaEl = document.getElementById('compr-hora').value.trim();
+      if (!texto) return;
+      t.disabled = true;
+      var novo = { id: 'cp' + Date.now() + Math.random().toString(36).slice(2,6), data: hoje(), hora: horaEl || null, texto: texto, feito: false };
+      var res = await window.sb.from('compromissos').insert(novo);
+      t.disabled = false;
+      if (!res.error){ window._compromissosHoje = (window._compromissosHoje||[]).concat([novo]); paint(); }
+      return;
+    }
+    var toggleId = t.getAttribute && t.getAttribute('data-compr-toggle');
+    if (toggleId){
+      var item = (window._compromissosHoje||[]).filter(function(c){ return c.id === toggleId; })[0];
+      if (!item) return;
+      var novoFeito = !item.feito;
+      var res2 = await window.sb.from('compromissos').update({ feito: novoFeito }).eq('id', toggleId);
+      if (!res2.error){ item.feito = novoFeito; paint(); }
+      return;
+    }
+    var delId = t.getAttribute && t.getAttribute('data-compr-del');
+    if (delId){
+      var res3 = await window.sb.from('compromissos').delete().eq('id', delId);
+      if (!res3.error){ window._compromissosHoje = (window._compromissosHoje||[]).filter(function(c){ return c.id !== delId; }); paint(); }
+    }
   });
 
   document.querySelectorAll('.tab').forEach(function(t){
@@ -3154,6 +3227,10 @@ window.initMenu = function initMenu(){
       paint();
     }).catch(function(){});
   }
+
+  window.sb.from('compromissos').select('*').eq('data', hoje()).then(function(res){
+    if (!res.error){ window._compromissosHoje = res.data || []; paint(); }
+  }).catch(function(){});
 };
 
 
@@ -3795,8 +3872,11 @@ window.initGerencial = async function initGerencial(){
         }
       });
       window.gerencialSaldoOnlinePorMes = porMesSaldo;
+      window.gerencialPorMesCompleto = porMes;
       if (window.renderDiaria) window.renderDiaria();
       if (window.renderConciliacaoDias) window.renderConciliacaoDias();
+      if (window.renderAnual) window.renderAnual();
+      if (window.renderContasPagar) window.renderContasPagar();
       var atual = await sb.from('resumo_cache').select('dados').eq('id',1).single();
       if (atual.error) return false;
       var rdados = atual.data.dados || {};
