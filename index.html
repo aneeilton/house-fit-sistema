@@ -167,6 +167,7 @@
   .badge.critical { background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
   .badge.warning { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
   .card-compromissos { border-top: 4px solid #C2410C; }
+  .card-vencimentos { border-top: 4px solid #BE2020; }
 
   .escala-print { background:#fff; border-radius:10px; overflow:hidden; box-shadow: var(--card-shadow); margin-bottom:18px; }
   .escala-print table { width:100%; border-collapse:collapse; }
@@ -1332,9 +1333,36 @@ window.renderConciliacaoHistorico = async function(){
 
 // ================= MENSAL =================
 // ================= CONTAS A PAGAR =================
+window.vencimentosProximos = function(){
+  var hojeDate = new Date(); hojeDate.setHours(0,0,0,0);
+  var hojeStr = todayISOTop().slice(0,7);
+  var cp = buildContasPagar(hojeStr);
+  var itensPorNome = {};
+  cp.grupos.forEach(function(g){ g.itens.forEach(function(it){ itensPorNome[it.nome] = it; }); });
+  var venc = window.vencimentosPorItem || {};
+  var lista = [];
+  Object.keys(venc).forEach(function(nome){
+    var dia = venc[nome];
+    if (dia == null) return;
+    var item = itensPorNome[nome];
+    if (item && item.realizado > 0) return; // já lançado esse mês
+    var y = hojeDate.getFullYear(), m = hojeDate.getMonth();
+    var diasNoMes = new Date(y, m+1, 0).getDate();
+    var diaAjustado = Math.min(dia, diasNoMes);
+    var dataVenc = new Date(y, m, diaAjustado);
+    var diffDias = Math.round((dataVenc - hojeDate) / 86400000);
+    if (diffDias >= -3 && diffDias <= 5){
+      lista.push({ nome: nome, dia: diaAjustado, diasRestantes: diffDias, planejado: item ? item.planejado : null });
+    }
+  });
+  lista.sort(function(a,b){ return a.diasRestantes - b.diasRestantes; });
+  return lista;
+};
+
 window.renderContasPagar = function renderContasPagar() {
   DATA = buildData();
   const cp = DATA.contas_pagar;
+  const venc = window.vencimentosPorItem || {};
   const kpiC = document.getElementById('kpi-contaspagar');
   kpiC.innerHTML = '';
   const pct = cp.total.realizado / cp.total.planejado;
@@ -1348,14 +1376,30 @@ window.renderContasPagar = function renderContasPagar() {
 
   let rows = '';
   cp.grupos.forEach(g => {
-    rows += `<tr class="group-row"><td>${g.nome}</td><td class="num">${fmtBRL(g.planejado)}</td><td class="num">${fmtBRL(g.realizado)}</td></tr>`;
+    rows += `<tr class="group-row"><td>${g.nome}</td><td class="num">${fmtBRL(g.planejado)}</td><td class="num">${fmtBRL(g.realizado)}</td><td></td></tr>`;
     g.itens.forEach(it => {
-      rows += `<tr class="item-row"><td>${it.nome}</td><td class="num">${it.planejado != null ? fmtBRL(it.planejado) : '—'}</td><td class="num">${it.realizado != null ? fmtBRL(it.realizado) : '—'}</td></tr>`;
+      var diaSalvo = venc[it.nome];
+      rows += `<tr class="item-row"><td>${it.nome}</td><td class="num">${it.planejado != null ? fmtBRL(it.planejado) : '—'}</td><td class="num">${it.realizado != null ? fmtBRL(it.realizado) : '—'}</td><td class="num"><input type="number" min="1" max="31" class="venc-dia-input" data-item="${it.nome.replace(/"/g,'&quot;')}" value="${diaSalvo != null ? diaSalvo : ''}" placeholder="dia" style="width:52px;text-align:center;padding:4px;border:1px solid var(--border);border-radius:6px"></td></tr>`;
     });
   });
-  rows += `<tr><td>TOTAL</td><td class="num">${fmtBRL(cp.total.planejado)}</td><td class="num">${fmtBRL(cp.total.realizado)}</td></tr>`;
+  rows += `<tr><td>TOTAL</td><td class="num">${fmtBRL(cp.total.planejado)}</td><td class="num">${fmtBRL(cp.total.realizado)}</td><td></td></tr>`;
   document.getElementById('tabela-contaspagar').innerHTML =
-    `<thead><tr><th>Grupo / item</th><th class="num">Planejado</th><th class="num">Realizado</th></tr></thead><tbody>${rows}</tbody>`;
+    `<thead><tr><th>Grupo / item</th><th class="num">Planejado</th><th class="num">Realizado</th><th class="num">Vence dia</th></tr></thead><tbody>${rows}</tbody>`;
+
+  var tbl = document.getElementById('tabela-contaspagar');
+  if (tbl && !tbl.dataset.wired){
+    tbl.dataset.wired = '1';
+    tbl.addEventListener('change', async function(e){
+      var el = e.target;
+      if (!el.classList || !el.classList.contains('venc-dia-input')) return;
+      var itemNome = el.getAttribute('data-item');
+      var dia = el.value ? parseInt(el.value, 10) : null;
+      if (dia != null && (dia < 1 || dia > 31)){ el.value = ''; return; }
+      window.vencimentosPorItem = window.vencimentosPorItem || {};
+      window.vencimentosPorItem[itemNome] = dia;
+      if (window.sb) await window.sb.from('contas_pagar_vencimentos').upsert({ item_nome: itemNome, dia_vencimento: dia });
+    });
+  }
 };
 renderContasPagar();
 
@@ -3135,16 +3179,21 @@ window.initMenu = function initMenu(){
     } else {
       compr.slice().sort(function(a,b){ return (a.hora||'').localeCompare(b.hora||''); }).forEach(function(c){
         h += '<div class="mod-item"><span class="txt"' + (c.feito ? ' style="text-decoration:line-through;color:var(--muted)"' : '') + '">' + (c.hora ? '<b>' + c.hora + '</b> — ' : '') + c.texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>';
-        h += '<button class="mod-mini" data-compr-toggle="' + c.id + '">' + (c.feito ? 'reabrir' : 'feito') + '</button>';
-        h += '<button class="mod-mini" data-compr-del="' + c.id + '">apagar</button></div>';
+        h += '<span class="mod-tag' + (c.feito ? ' ok' : '') + '">' + (c.feito ? 'feito' : 'pendente') + '</span></div>';
       });
     }
-    h += '</div>';
-    h += '<div class="mod-linha" style="margin-top:10px">';
-    h += '<input class="mod-campo" id="compr-hora" type="text" placeholder="Hora" style="max-width:80px">';
-    h += '<input class="mod-campo" id="compr-texto" type="text" placeholder="Novo compromisso de hoje">';
-    h += '<button class="btn-dash" id="compr-add">Adicionar</button>';
     h += '</div></div>';
+
+    var vencendo = window.vencimentosProximos ? window.vencimentosProximos() : [];
+    if (vencendo.length){
+      h += '<div class="card card-vencimentos"><h3>Contas a vencer</h3>';
+      vencendo.forEach(function(v){
+        var txt = v.diasRestantes < 0 ? (Math.abs(v.diasRestantes) + 'd atrasado') : (v.diasRestantes === 0 ? 'vence hoje' : 'vence em ' + v.diasRestantes + 'd');
+        h += '<div class="mod-item"><span class="txt">' + v.nome + ' <span class="mod-msg">(dia ' + v.dia + ')</span></span>';
+        h += '<span class="mod-tag' + (v.diasRestantes <= 0 ? ' grave' : ' alerta') + '">' + txt + '</span></div>';
+      });
+      h += '</div>';
+    }
 
     h += '<div class="card"><h3>Gestão House Fit</h3>';
     h += '<div class="cardsub">Escolha por onde começar. Os números são do ciclo atual.</div>';
@@ -3165,35 +3214,6 @@ window.initMenu = function initMenu(){
     if (!b) return;
     var alvo = document.querySelector('.tab[data-view="' + b.getAttribute('data-goto') + '"]');
     if (alvo){ alvo.click(); window.scrollTo(0,0); }
-  });
-
-  box.addEventListener('click', async function(e){
-    var t = e.target;
-    if (t.id === 'compr-add'){
-      var texto = document.getElementById('compr-texto').value.trim();
-      var horaEl = document.getElementById('compr-hora').value.trim();
-      if (!texto) return;
-      t.disabled = true;
-      var novo = { id: 'cp' + Date.now() + Math.random().toString(36).slice(2,6), data: hoje(), hora: horaEl || null, texto: texto, feito: false };
-      var res = await window.sb.from('compromissos').insert(novo);
-      t.disabled = false;
-      if (!res.error){ window._compromissosHoje = (window._compromissosHoje||[]).concat([novo]); paint(); }
-      return;
-    }
-    var toggleId = t.getAttribute && t.getAttribute('data-compr-toggle');
-    if (toggleId){
-      var item = (window._compromissosHoje||[]).filter(function(c){ return c.id === toggleId; })[0];
-      if (!item) return;
-      var novoFeito = !item.feito;
-      var res2 = await window.sb.from('compromissos').update({ feito: novoFeito }).eq('id', toggleId);
-      if (!res2.error){ item.feito = novoFeito; paint(); }
-      return;
-    }
-    var delId = t.getAttribute && t.getAttribute('data-compr-del');
-    if (delId){
-      var res3 = await window.sb.from('compromissos').delete().eq('id', delId);
-      if (!res3.error){ window._compromissosHoje = (window._compromissosHoje||[]).filter(function(c){ return c.id !== delId; }); paint(); }
-    }
   });
 
   document.querySelectorAll('.tab').forEach(function(t){
@@ -3304,6 +3324,13 @@ window.initMenu = function initMenu(){
       await window.initGerencial();
       await window.initClientes();
       await window.initEscala();
+      try{
+        var rVenc = await window.sb.from('contas_pagar_vencimentos').select('*');
+        var mapVenc = {};
+        (rVenc.data||[]).forEach(function(r){ mapVenc[r.item_nome] = r.dia_vencimento; });
+        window.vencimentosPorItem = mapVenc;
+        if (window.renderContasPagar) window.renderContasPagar();
+      }catch(eVenc){ /* best-effort */ }
       if (window.initMenu) window.initMenu();
       configurarSeletorMestre();
     }catch(e){
