@@ -1351,7 +1351,7 @@ window.vencimentosProximos = function(){
     var diaAjustado = Math.min(dia, diasNoMes);
     var dataVenc = new Date(y, m, diaAjustado);
     var diffDias = Math.round((dataVenc - hojeDate) / 86400000);
-    if (diffDias >= -3 && diffDias <= 5){
+    if (diffDias >= -3 && diffDias <= 1){
       lista.push({ nome: nome, dia: diaAjustado, diasRestantes: diffDias, planejado: item ? item.planejado : null });
     }
   });
