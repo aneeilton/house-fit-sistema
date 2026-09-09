@@ -2590,7 +2590,7 @@ window.initModulos = async function initModulos(){
   var r2 = await sb.from('registros_equipe').select('*').order('em', { ascending:false });
   L.registrosEquipe = (r2.data || []).map(function(r){ return { id:r.id, colaborador:r.colaborador, texto:r.texto, data:r.data, em:r.em }; });
 
-  var r3 = await sb.from('checklist_itens').select('*');
+  var r3 = await sb.from('checklist_itens').select('*').order('bloco').order('setor');
   if (!r3.data || !r3.data.length){
     var seedRows = SEED_ITENS.map(function(i){ return { id: uid(), bloco:i[0], setor:i[1], titulo:i[2] }; });
     await sb.from('checklist_itens').insert(seedRows);
