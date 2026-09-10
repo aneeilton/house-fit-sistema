@@ -596,6 +596,20 @@
   #tabela-contaspagar .cp-status-sel[data-st="pago"] { border-color: var(--good); color: var(--good); }
   #tabela-contaspagar .cp-status-sel[data-st="agendado"] { border-color: var(--warning); }
 
+  /* Hoje — faixa de leitura rápida (3 números) */
+  .viz-root .hoje-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  .viz-root .hoje-kpis .k { background: var(--surface-1); border-radius: 14px; box-shadow: var(--card-shadow); padding: 12px 10px; }
+  .viz-root .hoje-kpis .kl { font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-secondary); margin-bottom: 4px; line-height: 1.2; }
+  .viz-root .hoje-kpis .kv { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .viz-root .hoje-kpis .kv.bad { color: var(--critical); }
+
+  /* Espaço entre cards empilhados dentro dos módulos e das telas de tabela */
+  [id^="mod-"] > .card,
+  #view-conciliacao > .card,
+  #view-contaspagar > .card,
+  #view-anual > .card { margin-bottom: 16px; }
+  [id^="mod-"] > .card:last-child { margin-bottom: 0; }
+
   /* Equipe — status por colaborador */
   .viz-root .colab-bloco { border-top: 1px solid var(--grid); padding: 10px 0; }
   .viz-root .colab-bloco:first-of-type { border-top: 0; }
@@ -1625,11 +1639,10 @@ window.renderContasPagar = function renderContasPagar() {
   const pct = cp.total.realizado / cp.total.planejado;
   kpiC.appendChild(kpiCard('Total planejado — ' + cp.mes, fmtBRL(cp.total.planejado)));
   kpiC.appendChild(kpiCard('Total realizado', fmtBRL(cp.total.realizado)));
-  const variacao = cp.total.planejado - cp.total.realizado;
-  const cardVariacao = document.createElement('div'); cardVariacao.className = 'kpi';
-  cardVariacao.innerHTML = `<div class="label">Variação</div><div class="value" style="color:${variacao >= 0 ? 'var(--good)' : 'var(--critical)'}">${fmtBRL(variacao)}</div>`;
-  kpiC.appendChild(cardVariacao);
-  kpiC.appendChild(kpiCard('% variação', (pct * 100).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%'));
+  const restante = cp.total.planejado - cp.total.realizado;
+  const cardRestante = document.createElement('div'); cardRestante.className = 'kpi';
+  cardRestante.innerHTML = `<div class="label">A pagar ainda no mês</div><div class="value">${fmtBRL(restante)}</div>`;
+  kpiC.appendChild(cardRestante);
 
   let rows = '';
   cp.grupos.forEach(g => {
@@ -3554,6 +3567,18 @@ window.initMenu = function initMenu(){
       }
     } catch(e){}
 
+    // leitura rápida da Hoje: caixa / resultado do mês / a pagar
+    var kCaixa = null, kResMes = null, kAPagar = null;
+    try {
+      var ymK = hoje().slice(0,7);
+      kResMes = buildDiaria(ymK).confronto.saldo_final_apurado;
+      var soK = L.saldoOnline || (typeof EXTERNAL !== 'undefined' ? EXTERNAL.confronto_online : null) || {};
+      kCaixa = (typeof soK.total === 'number') ? soK.total
+             : nD(soK.Dinheiro || soK.dinheiro) + nD(soK.C6 || soK.c6) + nD(soK.Infinity || soK.infinity);
+      var cpK = buildContasPagar(ymK);
+      kAPagar = cpK.total.planejado - cpK.total.realizado;
+    } catch(e){}
+
     function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
     // aniversários dos colaboradores — mesma regra do módulo Equipe (formato "MM-DD")
     function diasAniv(mmdd){
@@ -3585,59 +3610,92 @@ window.initMenu = function initMenu(){
     h += '</div>';
 
     var avisos = [];
-    if (atraso !== null && atraso > 1)
-      avisos.push({ txt: atraso + ' dias sem lançar o caixa', goto:'lancamento' });
-    if (vencendo.length){
-      var atrasadas = vencendo.filter(function(v){ return v.diasRestantes <= 0; }).length;
-      avisos.push({ txt: vencendo.length + (vencendo.length===1?' conta a vencer':' contas a vencer') + (atrasadas ? ' (' + atrasadas + ' atrasada' + (atrasadas>1?'s':'') + ')' : ''), goto:'contaspagar' });
-    }
-    if (vl.alerta)
-      avisos.push({ txt: vl.alerta + (vl.alerta===1?' lote em alerta de validade':' lotes em alerta de validade'), goto:'validade' });
-    if (window.satisfacaoResumoAtual && window.satisfacaoResumoAtual.naoLidas)
-      avisos.push({ txt: window.satisfacaoResumoAtual.naoLidas + (window.satisfacaoResumoAtual.naoLidas===1?' pesquisa de satisfação não lida':' pesquisas de satisfação não lidas'), goto:'satisfacao' });
+    function av(txt, goto, pri){ avisos.push({ txt: txt, goto: goto, pri: pri }); }
+
+    // 1 — dinheiro que não fecha
     if (conc.cls === 'alerta')
-      avisos.push({ txt: 'Caixa não bateu — ' + conc.txt, goto:'conciliacao' });
-    (function(){
-      var pd = hoje().split('-').map(Number);
-      var diasFimMes = new Date(pd[0], pd[1], 0).getDate() - pd[2];
-      var escalaPend = window._escalaCardInfo && window._escalaCardInfo.checklistPendente;
-      if (escalaPend || diasFimMes <= 7)
-        avisos.push({ txt: 'Montar a escala do mês seguinte (folgas e feriados)', goto:'escala' });
-    })();
+      av('Caixa não bateu — ' + conc.txt, 'conciliacao', 1);
+
+    // 2/3 — contas a pagar: nomeia as 3 mais urgentes
+    if (vencendo.length){
+      var vs = vencendo.slice().sort(function(a,b){ return a.diasRestantes - b.diasRestantes; });
+      vs.slice(0, 3).forEach(function(v){
+        var ad = Math.abs(v.diasRestantes);
+        var q = v.diasRestantes < 0 ? ('venceu há ' + ad + (ad === 1 ? ' dia' : ' dias'))
+              : (v.diasRestantes === 0 ? 'vence hoje' : 'vence em ' + v.diasRestantes + (v.diasRestantes === 1 ? ' dia' : ' dias'));
+        av(v.nome + ' — ' + q, 'contaspagar', v.diasRestantes < 0 ? 2 : 3);
+      });
+      if (vs.length > 3) av('+ ' + (vs.length - 3) + ' outras contas a vencer', 'contaspagar', 3);
+    }
+
+    // 3 — lançamento parado
+    if (atraso !== null && atraso > 1)
+      av(atraso + ' dias sem lançar o caixa', 'lancamento', 3);
+
+    // 2/3 — obrigações legais (órgãos)
     (function(){
       var docs = window._documentosConformidade || [];
+      var h0 = new Date(); h0.setHours(0,0,0,0);
       docs.forEach(function(dc){
         if (dc.quadro !== 'orgaos' || !dc.vencimento) return;
-        var x = new Date(String(dc.vencimento).slice(0,10) + 'T00:00:00');
-        if (isNaN(x)) return;
-        var h0 = new Date(); h0.setHours(0,0,0,0);
+        var x = new Date(String(dc.vencimento).slice(0,10) + 'T00:00:00'); if (isNaN(x)) return;
         var dd = Math.round((x - h0) / 86400000);
-        if (dd < 0) avisos.push({ txt: dc.titulo + ' — vencido', goto:'documentacao' });
-        else if (dd <= 30) avisos.push({ txt: dc.titulo + ' vence em ' + dd + (dd === 1 ? ' dia' : ' dias'), goto:'documentacao' });
+        if (dd < 0) av(dc.titulo + ' — vencido', 'documentacao', 2);
+        else if (dd <= 30) av(dc.titulo + ' vence em ' + dd + (dd === 1 ? ' dia' : ' dias'), 'documentacao', 3);
       });
     })();
+
+    // 4 — manutenção preventiva
     (function(){
       var pv = window._preventivo || [];
       var venc = 0, prox = 0, h0 = new Date(); h0.setHours(0,0,0,0);
       pv.forEach(function(p){
         if (!p.proxima_data) return;
-        var x = new Date(String(p.proxima_data).slice(0,10) + 'T00:00:00');
-        if (isNaN(x)) return;
+        var x = new Date(String(p.proxima_data).slice(0,10) + 'T00:00:00'); if (isNaN(x)) return;
         var dd = Math.round((x - h0) / 86400000);
         if (dd < 0) venc++; else if (dd <= 7) prox++;
       });
-      if (venc) avisos.push({ txt: venc + (venc === 1 ? ' manutenção preventiva vencida' : ' manutenções preventivas vencidas'), goto:'preventivo' });
-      else if (prox) avisos.push({ txt: prox + (prox === 1 ? ' manutenção preventiva nos próximos 7 dias' : ' manutenções preventivas nos próximos 7 dias'), goto:'preventivo' });
+      if (venc) av(venc + (venc === 1 ? ' manutenção preventiva vencida' : ' manutenções preventivas vencidas'), 'preventivo', 4);
+      else if (prox) av(prox + (prox === 1 ? ' manutenção preventiva nos próximos 7 dias' : ' manutenções preventivas nos próximos 7 dias'), 'preventivo', 4);
     })();
+
+    // 4 — validade de estoque
+    if (vl.alerta)
+      av(vl.alerta + (vl.alerta === 1 ? ' lote em alerta de validade' : ' lotes em alerta de validade'), 'validade', 4);
+
+    // 5 — escala (só quando pendente e perto do fim do mês)
+    (function(){
+      var pd = hoje().split('-').map(Number);
+      var diasFimMes = new Date(pd[0], pd[1], 0).getDate() - pd[2];
+      var info = window._escalaCardInfo;
+      var escalaPend = info && info.checklistPendente;
+      if ((escalaPend && diasFimMes <= 10) || (!info && diasFimMes <= 7))
+        av('Montar a escala do mês seguinte (folgas e feriados)', 'escala', 5);
+    })();
+
+    // 6 — satisfação
+    if (window.satisfacaoResumoAtual && window.satisfacaoResumoAtual.naoLidas)
+      av(window.satisfacaoResumoAtual.naoLidas + (window.satisfacaoResumoAtual.naoLidas === 1 ? ' pesquisa de satisfação não lida' : ' pesquisas de satisfação não lidas'), 'satisfacao', 6);
+
+    avisos.sort(function(a, b){ return (a.pri || 9) - (b.pri || 9); });
 
     h += '<div class="mod-setor">Avisos</div>';
     if (!avisos.length){
       h += '<div class="mod-vazio">Tudo em dia.</div>';
     } else {
-      avisos.forEach(function(a){
+      avisos.slice(0, 7).forEach(function(a){
         h += '<div class="mod-item"><span class="txt">' + escH(a.txt) + '</span><button class="mod-mini" data-goto="' + a.goto + '">ver</button></div>';
       });
+      if (avisos.length > 7)
+        h += '<div class="mod-item"><span class="txt" style="color:var(--muted)">+ ' + (avisos.length - 7) + ' outros avisos</span></div>';
     }
+    h += '</div>';
+
+    /* ---- Faixa de leitura rápida ---- */
+    h += '<div class="hoje-kpis">';
+    h += '<div class="k"><div class="kl">Caixa hoje</div><div class="kv">' + (kCaixa != null ? fmtCompact(kCaixa) : '—') + '</div></div>';
+    h += '<div class="k"><div class="kl">Resultado do mês</div><div class="kv' + (kResMes != null && kResMes < 0 ? ' bad' : '') + '">' + (kResMes != null ? fmtCompact(kResMes) : '—') + '</div></div>';
+    h += '<div class="k"><div class="kl">A pagar no mês</div><div class="kv">' + (kAPagar != null ? fmtCompact(kAPagar) : '—') + '</div></div>';
     h += '</div>';
 
     /* ---- Card 2: Fechar o caixa de hoje ---- */
@@ -3658,11 +3716,11 @@ window.initMenu = function initMenu(){
     /* ---- Card 4: Aniversários próximos ---- */
     var aniv = ((L.colaboradores) || [])
       .map(function(c){ return { nome: c.nome, dias: diasAniv(c.aniversario) }; })
-      .filter(function(c){ return c.dias !== null && c.dias <= 15; })
+      .filter(function(c){ return c.dias !== null && c.dias <= 10; })
       .sort(function(a,b){ return a.dias - b.dias; });
     h += '<div class="card"><h3>Aniversários próximos</h3>';
     if (!aniv.length){
-      h += '<div class="mod-vazio">Nenhum nos próximos 15 dias.</div>';
+      h += '<div class="mod-vazio">Nenhum nos próximos 10 dias.</div>';
     } else {
       aniv.forEach(function(c){
         var t = c.dias === 0 ? '🎉 hoje' : (c.dias === 1 ? 'amanhã' : 'em ' + c.dias + ' dias');
@@ -3789,7 +3847,8 @@ window.initMenu = function initMenu(){
       await window.initModulos();
       await window.initSatisfacao();
       await window.initGerencial();
-      await window.initClientes();
+      // initClientes removido do boot: a tela "Clientes" saiu da navegação.
+      // Para reativar, recolocar a chamada aqui e o item na área Equipe da casca.
       await window.initEscala();
       await window.initDocumentacao();
       await window.initPreventivo();
@@ -4851,7 +4910,8 @@ window.initDocumentacao = async function initDocumentacao(){
         var s = statusItem(it);
         h += '<div class="colab-bloco">';
         h += '<div class="mod-item"><span class="txt"><b>' + esc(it.titulo) + '</b></span><span class="mod-tag' + (s.cls ? ' ' + s.cls : '') + '">' + esc(s.t) + '</span></div>';
-        h += '<div class="colab-edit" style="display:block">';
+        h += '<button class="mod-mini" data-editar-doc="' + it.id + '">editar</button>';
+        h += '<div class="colab-edit" id="ed-doc-' + it.id + '" style="display:none">';
         h += '<div class="campo-linha"><span class="cl-rot">Válido até</span><input class="mod-campo" type="date" id="doc-venc-' + it.id + '" value="' + isoIn(it.vencimento) + '" style="max-width:170px"></div>';
         h += '<label class="colab-chk"><input type="checkbox" id="doc-ok-' + it.id + '"' + (it.ok ? ' checked' : '') + '> Em dia (item sem data de validade)</label>';
         h += '<div class="campo-linha"><span class="cl-rot">Observações</span><input class="mod-campo" id="doc-obs-' + it.id + '" value="' + esc(it.obs) + '" style="max-width:260px"></div>';
@@ -4867,6 +4927,13 @@ window.initDocumentacao = async function initDocumentacao(){
   async function handlers(e){
     var t = e.target;
     var msg = document.getElementById('msg-doc');
+
+    var editarId = t.getAttribute && t.getAttribute('data-editar-doc');
+    if (editarId){
+      var cbx = document.getElementById('ed-doc-' + editarId);
+      if (cbx) cbx.style.display = (cbx.style.display === 'none' ? 'block' : 'none');
+      return;
+    }
 
     var salvarId = t.getAttribute && t.getAttribute('data-salvar-doc');
     if (salvarId){
@@ -4990,7 +5057,8 @@ window.initPreventivo = async function initPreventivo(){
         var acaoTxt = it.acao ? ' — última ' + esc(it.acao) : '';
         h += '<div class="colab-bloco">';
         h += '<div class="mod-item"><span class="txt"><b>' + esc(it.titulo) + '</b><span class="mod-msg">' + acaoTxt + '</span></span><span class="mod-tag' + (s.cls ? ' ' + s.cls : '') + '">' + esc(s.t) + '</span></div>';
-        h += '<div class="colab-edit" style="display:block">';
+        h += '<button class="mod-mini" data-editar-prev="' + it.id + '">editar</button>';
+        h += '<div class="colab-edit" id="ed-prev-' + it.id + '" style="display:none">';
         h += '<div class="campo-linha"><span class="cl-rot">Feito em</span><input class="mod-campo" type="date" id="pv-ult-' + it.id + '" value="' + isoIn(it.ultima_data) + '" style="max-width:170px"></div>';
         h += '<div class="campo-linha"><span class="cl-rot">Intervalo (dias)</span><input class="mod-campo" type="number" min="1" id="pv-int-' + it.id + '" value="' + esc(String(it.intervalo_dias)) + '" placeholder="ex: 15" style="max-width:100px"></div>';
         if (temInt){
@@ -5012,6 +5080,13 @@ window.initPreventivo = async function initPreventivo(){
   async function handlers(e){
     var t = e.target;
     var msg = document.getElementById('msg-prev');
+
+    var editarId = t.getAttribute && t.getAttribute('data-editar-prev');
+    if (editarId){
+      var cbx = document.getElementById('ed-prev-' + editarId);
+      if (cbx) cbx.style.display = (cbx.style.display === 'none' ? 'block' : 'none');
+      return;
+    }
 
     var salvarId = t.getAttribute && t.getAttribute('data-salvar-prev');
     if (salvarId){
