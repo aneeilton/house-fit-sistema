@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recepção — House Fit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    color-scheme: light;
+    --page:#eeeeee; --surface:#ffffff; --text:#212121; --text2:#5f5f5f; --muted:#9e9e9e;
+    --grid:#e0e0e0; --border:rgba(0,0,0,.12);
+    --accent:#ff6e00; --accent-ink:#e65100; --good:#0ca30c; --warn:#b5790a; --bad:#d03b3b;
+    --shadow:0 2px 1px -1px rgba(0,0,0,.2),0 1px 1px 0 rgba(0,0,0,.14),0 1px 3px 0 rgba(0,0,0,.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      color-scheme: dark;
+      --page:#141414; --surface:#1e1c1a; --text:#f0ede7; --text2:#c7c2ba; --muted:#9a948b;
+      --grid:#2c2925; --border:rgba(255,255,255,.14);
+      --accent:#ff7f1a; --accent-ink:#ffb066; --good:#23c723; --warn:#e0a83a; --bad:#f0605f;
+      --shadow:0 2px 1px -1px rgba(0,0,0,.5),0 1px 1px 0 rgba(0,0,0,.4),0 1px 3px 0 rgba(0,0,0,.35);
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--text);font-family:"Roboto",system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:16px 16px 60px}
+
+  #tela-login{position:fixed;inset:0;background:var(--page);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
+  .login-card{width:100%;max-width:340px;background:var(--surface);border-radius:14px;box-shadow:var(--shadow);padding:26px 22px}
+  .login-card h1{font-size:19px;margin:0 0 4px}
+  .login-card .sub{font-size:12.5px;color:var(--text2);margin-bottom:18px}
+  .login-card label{display:block;font-size:12px;color:var(--text2);margin:12px 0 4px}
+  .login-card input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--page);color:var(--text);font:inherit;font-size:15px}
+  .login-card button{width:100%;margin-top:18px;background:var(--accent);color:#fff;border:0;padding:11px;border-radius:10px;font:inherit;font-weight:500;font-size:14px;text-transform:uppercase;letter-spacing:.03em;cursor:pointer;box-shadow:var(--shadow)}
+  .login-card button:disabled{opacity:.6}
+  .login-card .aviso{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:16px}
+
+  .hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 0}
+  .brand{display:flex;flex-direction:column;line-height:1.25}
+  .brand-t{font-weight:700;letter-spacing:.04em;color:var(--accent-ink);font-size:15px}
+  .brand-s{font-size:11.5px;color:var(--text2)}
+  .btn-ghost{background:none;border:1px solid var(--border);border-radius:10px;padding:7px 12px;font:inherit;font-size:12px;color:var(--text2);cursor:pointer}
+
+  .maintabs{display:flex;gap:2px;border-bottom:1px solid var(--grid);margin-bottom:16px}
+  .mtab{flex:1;background:none;border:0;padding:11px 8px;font:inherit;font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:.03em;color:var(--text2);border-bottom:2px solid transparent;cursor:pointer}
+  .mtab.active{color:var(--accent-ink);border-bottom-color:var(--accent-ink)}
+
+  .area{display:none}
+  .area.active{display:block}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+  .seg{display:flex;background:var(--surface);border-radius:10px;box-shadow:var(--shadow);padding:3px;gap:2px}
+  .segbtn{background:none;border:0;padding:8px 14px;font:inherit;font-size:12.5px;font-weight:500;color:var(--text2);border-radius:7px;cursor:pointer;white-space:nowrap}
+  .segbtn.active{background:var(--accent);color:#fff}
+  .mesbar{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)}
+  .mesbar select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:12.5px}
+
+  .card{background:var(--surface);border-radius:14px;box-shadow:var(--shadow);padding:16px 18px;margin-bottom:16px}
+  .card h3{margin:0 0 4px;font-size:14px}
+  .cardsub{font-size:12px;color:var(--muted);margin-bottom:10px}
+  .cardhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+  .cardhead h3{margin:0}
+
+  .setor{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 6px}
+  .setor:first-child{margin-top:0}
+
+  .pac-bloco{border-top:1px solid var(--grid);padding:10px 0}
+  .pac-bloco:first-of-type{border-top:0}
+  .pac-bloco.inativo{opacity:.5}
+  .row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:4px 0;flex-wrap:wrap}
+  .rowtxt{font-size:13.5px;line-height:1.45}
+  .rowsub{font-size:12px;color:var(--text2);margin:2px 0 4px}
+  .muted{color:var(--muted)}
+  .acoes{display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:none}
+
+  .tag{font-size:11px;padding:3px 9px;border-radius:999px;background:var(--page);color:var(--text2);border:1px solid var(--grid);white-space:nowrap}
+  .tag.ok{background:color-mix(in srgb, var(--good) 15%, transparent);color:var(--good);border-color:transparent}
+
+  .mini{background:none;border:1px solid var(--border);color:var(--text2);font:inherit;font-size:11.5px;padding:5px 10px;border-radius:999px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+  .mini.danger{color:var(--bad);border-color:transparent}
+  .mini.wa{background:#25D366;color:#fff;border-color:transparent;font-weight:500}
+  .mini-chk{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px}
+  .mini-sel{font:inherit;font-size:11.5px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
+
+  .subform{margin-top:10px;padding:12px 14px;border:1px solid var(--grid);border-radius:10px;background:var(--page)}
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
+  .inp, .subform input[type=text], .subform input[type=date], .subform input[type=time],
+  .subform input[type=tel], .subform select{
+    width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;
+    background:var(--surface);color:var(--text);font:inherit;font-size:14px;
+  }
+  .chk{display:flex;align-items:center;gap:8px;font-size:13px;margin:10px 0}
+  .chk input{width:16px;height:16px}
+  .search{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:12.5px}
+
+  .btn{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:9px 16px;font:inherit;font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:.03em;cursor:pointer;box-shadow:var(--shadow)}
+  .btn:disabled{opacity:.6}
+  .btn-outline{background:none;border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 14px;font:inherit;font-size:12.5px;cursor:pointer}
+  .btn-outline.danger{color:var(--bad)}
+  .msg{font-size:12px;color:var(--muted);margin-left:10px}
+  .aviso{background:#fff3e6;border:1px solid var(--warn);color:#7a3d00;border-radius:8px;padding:10px 12px;font-size:12.5px;margin:8px 0;line-height:1.5}
+  @media (prefers-color-scheme: dark){ .aviso{background:#3a2200;color:#ffce9e} }
+  .vazio{font-size:13px;color:var(--muted);padding:10px 0}
+
+  @media (max-width:480px){
+    .row{flex-direction:column}
+    .acoes{width:100%}
+  }
+</style>
+</head><body>
+
+<div id="tela-login">
+  <div class="login-card">
+    <h1>Recepção — House Fit</h1>
+    <div class="sub">Entre com o e-mail e senha da recepção.</div>
+    <form id="login-form">
+      <label>E-mail</label>
+      <input type="email" id="login-email" required autocomplete="username">
+      <label>Senha</label>
+      <input type="password" id="login-senha" required autocomplete="current-password">
+      <button type="submit" id="login-btn">Entrar</button>
+    </form>
+    <div class="aviso" id="login-aviso" style="background:none;border:none;padding:0;color:var(--muted)"></div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <div class="wrap">
+    <header class="hdr">
+      <div class="brand"><span class="brand-t">HOUSE FIT</span><span class="brand-s">Recepção</span></div>
+      <button class="btn-ghost" id="btn-sair">Sair</button>
+    </header>
+
+    <nav class="maintabs">
+      <button class="mtab active" data-area="nutri">Nutricionista</button>
+      <button class="mtab" data-area="visit">Visitantes</button>
+    </nav>
+
+    <!-- ================= NUTRICIONISTA ================= -->
+    <section class="area active" id="area-nutri">
+      <div class="toolbar">
+        <div class="seg" id="seg-nutri">
+          <button class="segbtn active" data-nutri="mario">Dr. Mário</button>
+          <button class="segbtn" data-nutri="tomazia">Dra. Tomázia</button>
+        </div>
+        <div class="mesbar"><label>Mês</label><select id="nutri-mes"></select></div>
+      </div>
+
+      <div class="card" id="card-repasse"></div>
+
+      <div class="card">
+        <div class="cardhead">
+          <h3>Pacientes</h3>
+          <button class="btn" id="btn-novo-paciente">+ Novo paciente</button>
+        </div>
+        <div id="form-novo-paciente" class="subform" hidden></div>
+        <div id="lista-pacientes"></div>
+      </div>
+    </section>
+
+    <!-- ================= VISITANTES ================= -->
+    <section class="area" id="area-visit">
+      <div class="toolbar">
+        <div class="seg" id="seg-visit">
+          <button class="segbtn active" data-visit="experimental">Experimental</button>
+          <button class="segbtn" data-visit="convidado">Convidado</button>
+        </div>
+        <div class="mesbar"><label>Mês</label><select id="visit-mes"></select></div>
+      </div>
+
+      <div class="card">
+        <div class="cardhead">
+          <h3 id="visit-titulo">Nova aula experimental</h3>
+          <button class="btn" id="btn-novo-visitante">+ Cadastrar</button>
+        </div>
+        <div id="form-novo-visitante" class="subform" hidden></div>
+      </div>
+
+      <div class="card">
+        <div class="cardhead"><h3>Cadastrados no mês</h3><input id="visit-busca" class="search" placeholder="Buscar por nome"></div>
+        <div id="lista-visitantes"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+'use strict';
+var SUPABASE_URL = 'https://wpviywngfxfwydxzdtos.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_IUPLIgkuW_JOTJIWGqdu5g_9jxiyh5W';
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ---------------- helpers ---------------- */
+function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s){ return esc(s).replace(/"/g,'&quot;'); }
+function normaliza(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+function digits(s){ return String(s||'').replace(/\D/g,''); }
+function todayISO(){ var d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+function hojeYM(){ return todayISO().slice(0,7); }
+function fmtDataBR(iso){ var p = String(iso).slice(0,10).split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+function fmtDataHora(iso, hora){ var s = fmtDataBR(iso); if (hora) s += ' às ' + String(hora).slice(0,5); return s; }
+var MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+function mesLabel(ym){ var p = ym.split('-'); return MESES_PT[parseInt(p[1],10)-1] + '/' + p[0]; }
+function tipoLabel(t){ return t==='plano' ? 'Plano' : (t==='desafio' ? 'Desafio' : 'Consulta'); }
+
+function waLink(phoneRaw, msg){
+  var d = digits(phoneRaw);
+  if (!d) return null;
+  if (d.length <= 11) d = '55' + d;
+  return 'https://wa.me/' + d + '?text=' + encodeURIComponent(msg);
+}
+function msgExperimental(nome){
+  var primeiro = String(nome||'').trim().split(/\s+/)[0] || '';
+  return 'Oi ' + primeiro + '! Aqui é da House Fit 💪 Passando pra saber o que você achou da sua aula experimental — foi tudo certinho? Vai ficar muito bem-vindo(a) entre a gente! Quer saber como fica pra se tornar aluno(a)?';
+}
+function msgConvidado(nome, alunoNome){
+  var primeiro = String(nome||'').trim().split(/\s+/)[0] || '';
+  var alunoPrimeiro = String(alunoNome||'').trim().split(/\s+/)[0] || 'nosso aluno';
+  return 'Oi ' + primeiro + '! Aqui é da House Fit 💪 Que bom ter você aqui como convidado(a) do(a) ' + alunoPrimeiro + '! O que achou do treino? Bora conhecer nossos planos e treinar com a gente? 😊';
+}
+
+function popularMeses(sel, atual, onChange){
+  var hoje = new Date();
+  var opts = [];
+  for (var i = -6; i <= 1; i++){
+    var d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+    opts.push(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'));
+  }
+  sel.innerHTML = opts.map(function(ym){ return '<option value="'+ym+'"'+(ym===atual?' selected':'')+'>'+mesLabel(ym)+'</option>'; }).join('');
+  sel.addEventListener('change', function(){ onChange(sel.value); });
+}
+
+/* ---------------- estado ---------------- */
+var PACIENTES = [], AGEND = [], VISIT = [];
+var nutriSel = 'mario', visitTipoSel = 'experimental';
+var nutriMesSel = hojeYM(), visitMesSel = hojeYM();
+var pacExpand = {};
+
+async function carregarNutri(){
+  var r1 = await sb.from('nutri_pacientes').select('*').order('nome');
+  PACIENTES = r1.data || [];
+  var r2 = await sb.from('nutri_agendamentos').select('*');
+  AGEND = r2.data || [];
+}
+async function carregarVisit(){
+  var r = await sb.from('visitantes').select('*').order('data', { ascending:false });
+  VISIT = r.data || [];
+}
+
+/* ---------------- NUTRICIONISTA: cálculo do ciclo ---------------- */
+function statusCicloPlano(p, ym){
+  if (!p.ciclo_inicio) return null;
+  var anchor = String(p.ciclo_inicio).slice(0,7);
+  var pa = anchor.split('-').map(Number), pb = ym.split('-').map(Number);
+  var diff = (pb[0]-pa[0])*12 + (pb[1]-pa[1]);
+  if (diff < 0) return null;
+  return (diff % 2 === 0) ? 'consulta' : 'revisao';
+}
+function agendamentosDoMes(pacId, ym){
+  return AGEND.filter(function(a){ return a.paciente_id === pacId && String(a.data).slice(0,7) === ym && a.status !== 'cancelado'; });
+}
+function proximoAgendamento(pacId){
+  var hoje = todayISO();
+  return AGEND.filter(function(a){ return a.paciente_id === pacId && a.data >= hoje && a.status !== 'cancelado'; })
+    .sort(function(a,b){ return (a.data+(a.hora||'')).localeCompare(b.data+(b.hora||'')); })[0] || null;
+}
+function repasseDoMes(nutri, ym){
+  return PACIENTES.filter(function(p){ return p.nutricionista === nutri && p.ativo !== false; })
+    .map(function(p){
+      var ags = agendamentosDoMes(p.id, ym);
+      var status = (p.tipo === 'plano') ? statusCicloPlano(p, ym) : (ags.length ? 'consulta' : null);
+      return { p: p, ags: ags, status: status };
+    })
+    .filter(function(x){ return x.status === 'consulta'; });
+}
+
+/* ---------------- NUTRICIONISTA: render ---------------- */
+function renderRepasse(){
+  var box = document.getElementById('card-repasse');
+  var nome = nutriSel === 'mario' ? 'Dr. Mário' : 'Dra. Tomázia';
+  var lista = repasseDoMes(nutriSel, nutriMesSel);
+  var h = '<h3>Repasse devido — ' + nome + '</h3>';
+  h += '<div class="cardsub">Pacientes em mês de Consulta (paga) em ' + mesLabel(nutriMesSel) + ' — é quando a academia repassa ao nutricionista. Consulta/Desafio entram aqui quando têm agendamento no mês.</div>';
+  if (!lista.length){
+    h += '<div class="vazio">Nenhum paciente em mês de repasse.</div>';
+  } else {
+    lista.forEach(function(x){
+      h += '<div class="row"><span class="rowtxt"><b>' + esc(x.p.nome) + '</b> <span class="muted">· ' + tipoLabel(x.p.tipo) + '</span></span>'
+         + '<span class="tag ok">' + (x.ags.length ? x.ags.length + ' agend.' : 'agendar') + '</span></div>';
+    });
+  }
+  box.innerHTML = h;
+}
+
+function renderPacienteRow(p){
+  var prox = proximoAgendamento(p.id);
+  var st = (p.tipo === 'plano') ? statusCicloPlano(p, nutriMesSel) : null;
+  var stBadge = st === 'consulta' ? '<span class="tag ok">Consulta (repasse)</span>'
+              : st === 'revisao' ? '<span class="tag">Revisão (sem repasse)</span>' : '';
+  var ex = pacExpand[p.id] || {};
+  var h = '<div class="pac-bloco' + (p.ativo === false ? ' inativo' : '') + '">';
+  h += '<div class="row"><span class="rowtxt"><b>' + esc(p.nome) + '</b>' + (p.telefone ? ' <span class="muted">· ' + esc(p.telefone) + '</span>' : '') + '</span>' + stBadge + '</div>';
+  h += '<div class="rowsub">' + (prox ? 'Próximo: ' + fmtDataHora(prox.data, prox.hora) : 'Sem agendamento futuro') + '</div>';
+  h += '<div class="acoes">';
+  h += '<button class="mini" data-toggle="agendar" data-pac="' + p.id + '">agendar</button>';
+  h += '<button class="mini" data-toggle="historico" data-pac="' + p.id + '">histórico</button>';
+  h += '<button class="mini" data-toggle="editar" data-pac="' + p.id + '">editar</button>';
+  h += '</div>';
+
+  if (ex.agendar){
+    h += '<div class="subform">'
+       + '<div class="field"><label>Data</label><input type="date" id="ag-data-' + p.id + '" value="' + todayISO() + '"></div>'
+       + '<div class="field"><label>Hora</label><input type="time" id="ag-hora-' + p.id + '"></div>'
+       + '<button class="btn" data-salvar-agenda="' + p.id + '">Salvar agendamento</button>'
+       + '</div>';
+  }
+  if (ex.historico){
+    var hist = AGEND.filter(function(a){ return a.paciente_id === p.id; })
+      .sort(function(a,b){ return (b.data+(b.hora||'')).localeCompare(a.data+(a.hora||'')); });
+    h += '<div class="subform">';
+    if (!hist.length) h += '<div class="vazio">Sem agendamentos ainda.</div>';
+    hist.forEach(function(a){
+      h += '<div class="row"><span class="rowtxt">' + fmtDataHora(a.data, a.hora) + '</span>'
+         + '<span class="acoes"><select class="mini-sel" data-status-agenda="' + a.id + '">'
+         + ['agendado','realizado','faltou','cancelado'].map(function(s){ return '<option value="'+s+'"'+(a.status===s?' selected':'')+'>'+s+'</option>'; }).join('')
+         + '</select> <button class="mini danger" data-del-agenda="' + a.id + '">excluir</button></span></div>';
+    });
+    h += '</div>';
+  }
+  if (ex.editar){
+    h += '<div class="subform">'
+       + '<div class="field"><label>Nome</label><input class="inp" id="ed-nome-' + p.id + '" value="' + escAttr(p.nome) + '"></div>'
+       + '<div class="field"><label>Telefone</label><input class="inp" id="ed-tel-' + p.id + '" value="' + escAttr(p.telefone||'') + '"></div>'
+       + '<div class="field"><label>Tipo</label><select id="ed-tipo-' + p.id + '">'
+       + ['plano','consulta','desafio'].map(function(t){ return '<option value="'+t+'"'+(p.tipo===t?' selected':'')+'>'+tipoLabel(t)+'</option>'; }).join('')
+       + '</select></div>'
+       + '<div class="field"><label>Início do ciclo (só p/ Plano)</label><input type="date" id="ed-ciclo-' + p.id + '" value="' + (p.ciclo_inicio||'') + '"></div>'
+       + '<label class="chk"><input type="checkbox" id="ed-ativo-' + p.id + '"' + (p.ativo !== false ? ' checked' : '') + '> Ativo</label>'
+       + '<div class="acoes"><button class="btn" data-salvar-paciente="' + p.id + '">Salvar</button>'
+       + '<button class="btn-outline danger" data-arquivar-paciente="' + p.id + '">' + (p.ativo !== false ? 'Arquivar' : 'Reativar') + '</button></div>'
+       + '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function renderPacientes(){
+  var box = document.getElementById('lista-pacientes');
+  var lista = PACIENTES.filter(function(p){ return p.nutricionista === nutriSel; });
+  var grupos = [['plano','Plano'],['consulta','Consulta'],['desafio','Desafio']];
+  var h = '';
+  grupos.forEach(function(g){
+    var itens = lista.filter(function(p){ return p.tipo === g[0]; }).sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+    if (!itens.length) return;
+    h += '<div class="setor">' + g[1] + ' (' + itens.length + ')</div>';
+    itens.forEach(function(p){ h += renderPacienteRow(p); });
+  });
+  box.innerHTML = h || '<div class="vazio">Nenhum paciente cadastrado ainda.</div>';
+}
+
+/* ---------------- NUTRICIONISTA: eventos ---------------- */
+document.getElementById('seg-nutri').addEventListener('click', function(e){
+  var b = e.target.closest('.segbtn'); if (!b) return;
+  nutriSel = b.getAttribute('data-nutri');
+  document.querySelectorAll('#seg-nutri .segbtn').forEach(function(x){ x.classList.toggle('active', x===b); });
+  renderRepasse(); renderPacientes();
+});
+
+document.getElementById('btn-novo-paciente').addEventListener('click', function(){
+  var box = document.getElementById('form-novo-paciente');
+  box.hidden = !box.hidden;
+  if (box.hidden) return;
+  box.innerHTML =
+      '<div class="field"><label>Nome</label><input class="inp" id="np-nome"></div>'
+    + '<div class="field"><label>Telefone</label><input class="inp" id="np-tel" placeholder="(xx) 9xxxx-xxxx"></div>'
+    + '<div class="field"><label>Tipo</label><select id="np-tipo"><option value="plano">Plano</option><option value="consulta">Consulta</option><option value="desafio">Desafio</option></select></div>'
+    + '<div class="field" id="np-ciclo-wrap"><label>Mês de início do plano</label><input type="date" id="np-ciclo" value="' + todayISO() + '"></div>'
+    + '<button class="btn" id="np-salvar">Cadastrar paciente</button><span class="msg" id="np-msg"></span>';
+  document.getElementById('np-tipo').addEventListener('change', function(){
+    document.getElementById('np-ciclo-wrap').style.display = (this.value === 'plano') ? '' : 'none';
+  });
+  document.getElementById('np-salvar').addEventListener('click', async function(){
+    var nome = document.getElementById('np-nome').value.trim();
+    if (!nome) return;
+    var tel = document.getElementById('np-tel').value.trim();
+    var tipo = document.getElementById('np-tipo').value;
+    var ciclo = (tipo === 'plano') ? (document.getElementById('np-ciclo').value || null) : null;
+    this.disabled = true;
+    var novo = { id: uid(), nutricionista: nutriSel, nome: nome, telefone: tel || null, tipo: tipo, ciclo_inicio: ciclo, ativo: true };
+    var r = await sb.from('nutri_pacientes').insert(novo).select().single();
+    this.disabled = false;
+    if (r.error){ document.getElementById('np-msg').textContent = 'Erro ao salvar.'; return; }
+    PACIENTES.push(r.data);
+    box.hidden = true;
+    renderRepasse(); renderPacientes();
+  });
+});
+
+document.getElementById('lista-pacientes').addEventListener('click', async function(e){
+  var t = e.target;
+  var v;
+  if (v = t.getAttribute('data-toggle')){
+    var pacId = t.getAttribute('data-pac');
+    pacExpand[pacId] = pacExpand[pacId] || {};
+    pacExpand[pacId][v] = !pacExpand[pacId][v];
+    renderPacientes();
+    return;
+  }
+  if (v = t.getAttribute('data-salvar-agenda')){
+    var dEl = document.getElementById('ag-data-' + v), hEl = document.getElementById('ag-hora-' + v);
+    if (!dEl.value) return;
+    t.disabled = true;
+    var novo = { id: uid(), paciente_id: v, data: dEl.value, hora: hEl.value || null, status: 'agendado' };
+    var r = await sb.from('nutri_agendamentos').insert(novo).select().single();
+    t.disabled = false;
+    if (r.error){ alert('Não consegui salvar o agendamento.'); return; }
+    AGEND.push(r.data);
+    pacExpand[v].agendar = false;
+    renderRepasse(); renderPacientes();
+    return;
+  }
+  if (v = t.getAttribute('data-del-agenda')){
+    if (!confirm('Excluir este agendamento?')) return;
+    await sb.from('nutri_agendamentos').delete().eq('id', v);
+    AGEND = AGEND.filter(function(a){ return a.id !== v; });
+    renderRepasse(); renderPacientes();
+    return;
+  }
+  if (v = t.getAttribute('data-salvar-paciente')){
+    var nome = document.getElementById('ed-nome-' + v).value.trim();
+    if (!nome) return;
+    var tel = document.getElementById('ed-tel-' + v).value.trim();
+    var tipo = document.getElementById('ed-tipo-' + v).value;
+    var ciclo = document.getElementById('ed-ciclo-' + v).value || null;
+    var ativo = document.getElementById('ed-ativo-' + v).checked;
+    t.disabled = true;
+    var patch = { nome: nome, telefone: tel || null, tipo: tipo, ciclo_inicio: (tipo === 'plano' ? ciclo : null), ativo: ativo };
+    var r = await sb.from('nutri_pacientes').update(patch).eq('id', v);
+    t.disabled = false;
+    if (r.error){ alert('Não consegui salvar.'); return; }
+    var p = PACIENTES.filter(function(x){ return x.id === v; })[0];
+    if (p) Object.assign(p, patch);
+    pacExpand[v].editar = false;
+    renderRepasse(); renderPacientes();
+    return;
+  }
+  if (v = t.getAttribute('data-arquivar-paciente')){
+    var p2 = PACIENTES.filter(function(x){ return x.id === v; })[0];
+    if (!p2) return;
+    var novoAtivo = !(p2.ativo !== false);
+    await sb.from('nutri_pacientes').update({ ativo: novoAtivo }).eq('id', v);
+    p2.ativo = novoAtivo;
+    renderPacientes();
+    return;
+  }
+});
+document.getElementById('lista-pacientes').addEventListener('change', async function(e){
+  var id = e.target.getAttribute('data-status-agenda');
+  if (!id) return;
+  var novoStatus = e.target.value;
+  await sb.from('nutri_agendamentos').update({ status: novoStatus }).eq('id', id);
+  var a = AGEND.filter(function(x){ return x.id === id; })[0];
+  if (a) a.status = novoStatus;
+});
+
+/* ---------------- VISITANTES: regras ---------------- */
+function jaFezExperimentalNoMes(nome, telefone, ym){
+  var nn = normaliza(nome), td = digits(telefone);
+  return VISIT.filter(function(v){
+    if (v.tipo !== 'experimental' || String(v.data).slice(0,7) !== ym) return false;
+    if (td && digits(v.telefone) === td) return true;
+    if (!td && normaliza(v.nome) === nn) return true;
+    return false;
+  });
+}
+function convidadosDoAlunoNoMes(alunoNome, ym){
+  var na = normaliza(alunoNome);
+  return VISIT.filter(function(v){ return v.tipo === 'convidado' && normaliza(v.aluno_convite) === na && String(v.data).slice(0,7) === ym; });
+}
+function alunosConhecidos(){
+  var set = {};
+  VISIT.forEach(function(v){ if (v.aluno_convite) set[v.aluno_convite] = 1; });
+  return Object.keys(set).sort();
+}
+
+/* ---------------- VISITANTES: render ---------------- */
+function renderVisitantes(){
+  var box = document.getElementById('lista-visitantes');
+  var busca = normaliza(document.getElementById('visit-busca').value);
+  var lista = VISIT.filter(function(v){ return v.tipo === visitTipoSel && String(v.data).slice(0,7) === visitMesSel; })
+    .filter(function(v){ return !busca || normaliza(v.nome).indexOf(busca) > -1; })
+    .sort(function(a,b){ return String(b.data).localeCompare(String(a.data)); });
+  document.getElementById('visit-titulo').textContent = visitTipoSel === 'experimental' ? 'Nova aula experimental' : 'Novo convidado';
+  if (!lista.length){ box.innerHTML = '<div class="vazio">Nenhum cadastro em ' + mesLabel(visitMesSel) + '.</div>'; return; }
+  var h = '';
+  lista.forEach(function(v){
+    var wa = waLink(v.telefone, visitTipoSel === 'experimental' ? msgExperimental(v.nome) : msgConvidado(v.nome, v.aluno_convite));
+    h += '<div class="row visit-row">';
+    h += '<span class="rowtxt"><b>' + esc(v.nome) + '</b> <span class="muted">· ' + fmtDataBR(v.data) + (v.atividade ? ' · ' + esc(v.atividade) : '') + (v.aluno_convite ? ' · trazido por ' + esc(v.aluno_convite) : '') + '</span>'
+       + (v.telefone ? '<br><span class="muted">' + esc(v.telefone) + '</span>' : '') + '</span>';
+    h += '<span class="acoes">';
+    h += '<label class="mini-chk"><input type="checkbox" data-msg-enviada="' + v.id + '"' + (v.mensagem_enviada ? ' checked' : '') + '> msg enviada</label>';
+    if (wa) h += '<a class="mini wa" href="' + wa + '" target="_blank" rel="noopener">WhatsApp</a>';
+    h += '</span></div>';
+  });
+  box.innerHTML = h;
+}
+
+/* ---------------- VISITANTES: eventos ---------------- */
+document.getElementById('seg-visit').addEventListener('click', function(e){
+  var b = e.target.closest('.segbtn'); if (!b) return;
+  visitTipoSel = b.getAttribute('data-visit');
+  document.querySelectorAll('#seg-visit .segbtn').forEach(function(x){ x.classList.toggle('active', x===b); });
+  document.getElementById('form-novo-visitante').hidden = true;
+  renderVisitantes();
+});
+document.getElementById('visit-busca').addEventListener('input', renderVisitantes);
+
+document.getElementById('btn-novo-visitante').addEventListener('click', function(){
+  var box = document.getElementById('form-novo-visitante');
+  box.hidden = !box.hidden;
+  if (box.hidden) return;
+
+  var camposExtra = visitTipoSel === 'experimental'
+    ? '<div class="field"><label>Aula / atividade</label><input class="inp" id="nv-ativ" list="ativ-list" placeholder="Musculação, Muay Thai...">'
+      + '<datalist id="ativ-list"><option value="Musculação"><option value="Muay Thai"><option value="Dança"><option value="Funcional"></datalist></div>'
+    : '<div class="field"><label>Aluno que convidou</label><input class="inp" id="nv-aluno" list="aluno-list" placeholder="Nome do aluno">'
+      + '<datalist id="aluno-list">' + alunosConhecidos().map(function(n){ return '<option value="' + escAttr(n) + '">'; }).join('') + '</datalist></div>';
+
+  box.innerHTML =
+      '<div class="field"><label>Data</label><input type="date" id="nv-data" value="' + todayISO() + '"></div>'
+    + camposExtra
+    + '<div class="field"><label>Nome</label><input class="inp" id="nv-nome"></div>'
+    + '<div class="field"><label>Telefone</label><input class="inp" id="nv-tel" placeholder="(xx) 9xxxx-xxxx"></div>'
+    + '<div class="aviso" id="nv-aviso" hidden></div>'
+    + '<button class="btn" id="nv-salvar">Cadastrar</button><span class="msg" id="nv-msg"></span>';
+
+  var confirmarOverride = false;
+  document.getElementById('nv-salvar').addEventListener('click', async function(){
+    var btn = this;
+    var data = document.getElementById('nv-data').value;
+    var nome = document.getElementById('nv-nome').value.trim();
+    var tel = document.getElementById('nv-tel').value.trim();
+    if (!data || !nome) return;
+    var ym = data.slice(0,7);
+    var avisoBox = document.getElementById('nv-aviso');
+
+    if (visitTipoSel === 'experimental'){
+      var dup = jaFezExperimentalNoMes(nome, tel, ym);
+      if (dup.length && !confirmarOverride){
+        avisoBox.hidden = false;
+        avisoBox.textContent = '⚠ ' + nome + ' já fez aula experimental em ' + fmtDataBR(dup[0].data) + ' esse mês. Clique em Cadastrar de novo para confirmar mesmo assim.';
+        confirmarOverride = true;
+        return;
+      }
+    } else {
+      var alunoEl = document.getElementById('nv-aluno');
+      var alunoNome = alunoEl.value.trim();
+      if (!alunoNome){ document.getElementById('nv-msg').textContent = 'Informe o nome do aluno que convidou.'; return; }
+      var jaTem = convidadosDoAlunoNoMes(alunoNome, ym);
+      if (jaTem.length >= 2 && !confirmarOverride){
+        avisoBox.hidden = false;
+        avisoBox.textContent = '⚠ ' + alunoNome + ' já trouxe ' + jaTem.length + ' convidado(s) em ' + mesLabel(ym) + ' (limite é 2): ' + jaTem.map(function(x){ return x.nome; }).join(', ') + '. Clique em Cadastrar de novo para confirmar mesmo assim.';
+        confirmarOverride = true;
+        return;
+      }
+    }
+
+    btn.disabled = true;
+    var novo = {
+      id: uid(), tipo: visitTipoSel, data: data, nome: nome, telefone: tel || null,
+      atividade: visitTipoSel === 'experimental' ? (document.getElementById('nv-ativ').value.trim() || null) : null,
+      aluno_convite: visitTipoSel === 'convidado' ? document.getElementById('nv-aluno').value.trim() : null,
+      mensagem_enviada: false
+    };
+    var r = await sb.from('visitantes').insert(novo).select().single();
+    btn.disabled = false;
+    if (r.error){ document.getElementById('nv-msg').textContent = 'Erro ao salvar.'; return; }
+    VISIT.push(r.data);
+    box.hidden = true;
+    renderVisitantes();
+  });
+});
+
+document.getElementById('lista-visitantes').addEventListener('change', async function(e){
+  var id = e.target.getAttribute('data-msg-enviada');
+  if (!id) return;
+  var checked = e.target.checked;
+  await sb.from('visitantes').update({ mensagem_enviada: checked }).eq('id', id);
+  var v = VISIT.filter(function(x){ return x.id === id; })[0];
+  if (v) v.mensagem_enviada = checked;
+});
+
+/* ---------------- abas principais ---------------- */
+document.querySelectorAll('.mtab').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('.mtab').forEach(function(x){ x.classList.toggle('active', x===b); });
+    var area = b.getAttribute('data-area');
+    document.querySelectorAll('.area').forEach(function(s){ s.classList.toggle('active', s.id === 'area-' + area); });
+  });
+});
+
+/* ---------------- login / boot ---------------- */
+async function bootApp(){
+  document.getElementById('tela-login').style.display = 'none';
+  document.getElementById('app').style.display = '';
+  await Promise.all([carregarNutri(), carregarVisit()]);
+  renderRepasse(); renderPacientes(); renderVisitantes();
+}
+function mostrarLogin(msg){
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('tela-login').style.display = 'flex';
+  document.getElementById('login-aviso').textContent = msg || '';
+}
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var email = document.getElementById('login-email').value.trim();
+  var senha = document.getElementById('login-senha').value;
+  var btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  document.getElementById('login-aviso').textContent = 'Entrando…';
+  var r = await sb.auth.signInWithPassword({ email: email, password: senha });
+  btn.disabled = false;
+  if (r.error){ document.getElementById('login-aviso').textContent = 'E-mail ou senha inválidos.'; return; }
+  bootApp();
+});
+document.getElementById('btn-sair').addEventListener('click', async function(){
+  await sb.auth.signOut();
+  mostrarLogin('');
+});
+
+(async function init(){
+  popularMeses(document.getElementById('nutri-mes'), nutriMesSel, function(v){ nutriMesSel = v; renderRepasse(); renderPacientes(); });
+  popularMeses(document.getElementById('visit-mes'), visitMesSel, function(v){ visitMesSel = v; renderVisitantes(); });
+  try{
+    var s = await sb.auth.getSession();
+    if (s.data && s.data.session) bootApp(); else mostrarLogin('');
+  }catch(e){ mostrarLogin(''); }
+})();
+</script>
+</body></html>
