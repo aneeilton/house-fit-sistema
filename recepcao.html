@@ -106,13 +106,13 @@
   @media (prefers-color-scheme: dark){ .aviso{background:#3a2200;color:#ffce9e} }
   .vazio{font-size:13px;color:var(--muted);padding:10px 0}
 
-  .sem-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
-  @media (min-width:640px){ .sem-grid{grid-template-columns:repeat(6,1fr)} }
-  .sem-dia{background:var(--page);border-radius:10px;padding:8px}
-  .sem-dia-tit{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px}
-  .sem-item{font-size:11.5px;padding:2px 0;line-height:1.3}
-  .sem-vazio{font-size:11px;color:var(--muted)}
-  #card-semana .cardhead .acoes{gap:8px}
+  .mesx{overflow-x:auto;margin-top:8px}
+  .mestbl{width:100%;border-collapse:collapse;font-size:11.5px;min-width:520px}
+  .mestbl th,.mestbl td{padding:6px 8px;border-bottom:1px solid var(--grid);text-align:left;white-space:nowrap}
+  .mestbl th{color:var(--text2);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em}
+  .mestbl td:first-child,.mestbl th:first-child{white-space:normal;min-width:130px}
+  .mestbl td{color:var(--text2)}
+  .mestbl td:first-child{color:var(--text)}
 
   @media (max-width:480px){
     .row{flex-direction:column}
@@ -160,7 +160,7 @@
 
       <div class="card" id="card-repasse"></div>
 
-      <div class="card" id="card-semana"></div>
+      <div class="card" id="card-agenda-mes"></div>
 
       <div class="card">
         <div class="cardhead">
@@ -369,7 +369,9 @@ function renderPacienteRow(p){
 
 function renderPacientes(){
   var box = document.getElementById('lista-pacientes');
-  var lista = PACIENTES.filter(function(p){ return p.nutricionista === nutriSel; });
+  var todos = PACIENTES.filter(function(p){ return p.nutricionista === nutriSel; });
+  var ativos = todos.filter(function(p){ return p.ativo !== false; });
+  var arquivados = todos.filter(function(p){ return p.ativo === false; });
   var grupos = [
     { label: 'Plano', match: ['plano1','plano2'] },
     { label: 'Consulta', match: ['consulta1','consulta2'] },
@@ -377,49 +379,51 @@ function renderPacientes(){
   ];
   var h = '';
   grupos.forEach(function(g){
-    var itens = lista.filter(function(p){ return g.match.indexOf(p.tipo) > -1; }).sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+    var itens = ativos.filter(function(p){ return g.match.indexOf(p.tipo) > -1; }).sort(function(a,b){ return a.nome.localeCompare(b.nome); });
     if (!itens.length) return;
     h += '<div class="setor">' + g.label + ' (' + itens.length + ')</div>';
     itens.forEach(function(p){ h += renderPacienteRow(p); });
   });
+  if (arquivados.length){
+    h += '<div class="setor">Arquivados (' + arquivados.length + ')</div>';
+    arquivados.sort(function(a,b){ return a.nome.localeCompare(b.nome); }).forEach(function(p){ h += renderPacienteRow(p); });
+  }
   box.innerHTML = h || '<div class="vazio">Nenhum paciente cadastrado ainda.</div>';
 }
 
-/* ---------------- NUTRICIONISTA: agenda visual da semana ---------------- */
-var semanaOffset = 0;
-var DIAS_SEMANA = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
-function isoDeData(d){ return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
-function diasDaSemana(offset){
-  var hoje = new Date();
-  var diaSemana = hoje.getDay(); // 0 = domingo
-  var seg = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - ((diaSemana+6)%7) + offset*7);
-  var dias = [];
-  for (var i = 0; i < 6; i++){ dias.push(new Date(seg.getFullYear(), seg.getMonth(), seg.getDate()+i)); }
-  return dias;
-}
-function renderSemana(){
-  var box = document.getElementById('card-semana');
-  var dias = diasDaSemana(semanaOffset);
-  var h = '<div class="cardhead"><h3>Agenda da semana</h3>'
-    + '<span class="acoes"><button class="mini" id="sem-ant">‹ anterior</button>'
-    + '<span class="muted" style="font-size:12px">' + fmtDataBR(isoDeData(dias[0])) + ' – ' + fmtDataBR(isoDeData(dias[5])) + '</span>'
-    + '<button class="mini" id="sem-prox">seguinte ›</button></span></div>';
-  h += '<div class="sem-grid">';
-  dias.forEach(function(d, idx){
-    var iso = isoDeData(d);
-    var doDia = AGEND.filter(function(a){ return a.data === iso && a.status !== 'cancelado'; })
-      .map(function(a){ return { a: a, p: PACIENTES.filter(function(x){ return x.id === a.paciente_id; })[0] }; })
-      .filter(function(x){ return x.p && x.p.nutricionista === nutriSel; })
-      .sort(function(x,y){ return (x.a.hora||'').localeCompare(y.a.hora||''); });
-    h += '<div class="sem-dia"><div class="sem-dia-tit">' + DIAS_SEMANA[idx] + ' · ' + fmtDataBR(iso).slice(0,5) + '</div>';
-    if (!doDia.length) h += '<div class="sem-vazio">—</div>';
-    else doDia.forEach(function(x){ h += '<div class="sem-item">' + (x.a.hora ? String(x.a.hora).slice(0,5) + ' ' : '') + esc(x.p.nome) + '</div>'; });
-    h += '</div>';
+/* ---------------- NUTRICIONISTA: agenda visual do mês ---------------- */
+function semanaDoMes(dia){ return Math.min(4, Math.ceil(dia / 7)); }
+function renderAgendaMes(){
+  var box = document.getElementById('card-agenda-mes');
+  var pacientesNutri = PACIENTES.filter(function(p){ return p.nutricionista === nutriSel && p.ativo !== false; })
+    .sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+  var agsDoMes = AGEND.filter(function(a){ return String(a.data).slice(0,7) === nutriMesSel && a.status !== 'cancelado'; });
+
+  var h = '<div class="cardhead"><h3>Agenda do mês</h3><span class="muted" style="font-size:12px">' + mesLabel(nutriMesSel) + '</span></div>';
+  if (!pacientesNutri.length){
+    h += '<div class="vazio">Nenhum paciente ativo cadastrado ainda.</div>';
+    box.innerHTML = h;
+    return;
+  }
+  h += '<div class="mesx"><table class="mestbl"><thead><tr><th>Paciente</th><th>Semana 1</th><th>Semana 2</th><th>Semana 3</th><th>Semana 4</th></tr></thead><tbody>';
+  pacientesNutri.forEach(function(p){
+    var porSemana = { 1: [], 2: [], 3: [], 4: [] };
+    agsDoMes.filter(function(a){ return a.paciente_id === p.id; }).forEach(function(a){
+      var dia = parseInt(String(a.data).slice(8,10), 10);
+      porSemana[semanaDoMes(dia)].push(a);
+    });
+    h += '<tr><td>' + esc(p.nome) + '</td>';
+    for (var s = 1; s <= 4; s++){
+      var cel = porSemana[s]
+        .sort(function(a,b){ return (a.hora||'').localeCompare(b.hora||''); })
+        .map(function(a){ return fmtDataBR(a.data).slice(0,5) + (a.hora ? ' ' + String(a.hora).slice(0,5) : ''); })
+        .join('<br>');
+      h += '<td>' + (cel || '—') + '</td>';
+    }
+    h += '</tr>';
   });
-  h += '</div>';
+  h += '</tbody></table></div>';
   box.innerHTML = h;
-  document.getElementById('sem-ant').addEventListener('click', function(){ semanaOffset--; renderSemana(); });
-  document.getElementById('sem-prox').addEventListener('click', function(){ semanaOffset++; renderSemana(); });
 }
 
 /* ---------------- NUTRICIONISTA: eventos ---------------- */
@@ -427,7 +431,7 @@ document.getElementById('seg-nutri').addEventListener('click', function(e){
   var b = e.target.closest('.segbtn'); if (!b) return;
   nutriSel = b.getAttribute('data-nutri');
   document.querySelectorAll('#seg-nutri .segbtn').forEach(function(x){ x.classList.toggle('active', x===b); });
-  renderRepasse(); renderPacientes(); renderSemana();
+  renderRepasse(); renderPacientes(); renderAgendaMes();
 });
 
 document.getElementById('btn-novo-paciente').addEventListener('click', function(){
@@ -486,14 +490,14 @@ document.getElementById('lista-pacientes').addEventListener('click', async funct
     if (r.error){ alert('Não consegui salvar o agendamento.'); return; }
     AGEND.push(r.data);
     pacExpand[v].agendar = false;
-    renderRepasse(); renderPacientes(); renderSemana();
+    renderRepasse(); renderPacientes(); renderAgendaMes();
     return;
   }
   if (v = t.getAttribute('data-del-agenda')){
     if (!confirm('Excluir este agendamento?')) return;
     await sb.from('nutri_agendamentos').delete().eq('id', v);
     AGEND = AGEND.filter(function(a){ return a.id !== v; });
-    renderRepasse(); renderPacientes(); renderSemana();
+    renderRepasse(); renderPacientes(); renderAgendaMes();
     return;
   }
   if (v = t.getAttribute('data-salvar-paciente')){
@@ -699,7 +703,7 @@ async function bootApp(){
   document.getElementById('tela-login').style.display = 'none';
   document.getElementById('app').style.display = '';
   await Promise.all([carregarNutri(), carregarVisit()]);
-  renderRepasse(); renderPacientes(); renderSemana(); renderVisitantes();
+  renderRepasse(); renderPacientes(); renderAgendaMes(); renderVisitantes();
 }
 function mostrarLogin(msg){
   document.getElementById('app').style.display = 'none';
@@ -724,7 +728,7 @@ document.getElementById('btn-sair').addEventListener('click', async function(){
 });
 
 (async function init(){
-  popularMeses(document.getElementById('nutri-mes'), nutriMesSel, function(v){ nutriMesSel = v; renderRepasse(); renderPacientes(); });
+  popularMeses(document.getElementById('nutri-mes'), nutriMesSel, function(v){ nutriMesSel = v; renderRepasse(); renderPacientes(); renderAgendaMes(); });
   popularMeses(document.getElementById('visit-mes'), visitMesSel, function(v){ visitMesSel = v; renderVisitantes(); });
   try{
     var s = await sb.auth.getSession();
