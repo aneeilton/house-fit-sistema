@@ -106,6 +106,14 @@
   @media (prefers-color-scheme: dark){ .aviso{background:#3a2200;color:#ffce9e} }
   .vazio{font-size:13px;color:var(--muted);padding:10px 0}
 
+  .sem-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  @media (min-width:640px){ .sem-grid{grid-template-columns:repeat(6,1fr)} }
+  .sem-dia{background:var(--page);border-radius:10px;padding:8px}
+  .sem-dia-tit{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px}
+  .sem-item{font-size:11.5px;padding:2px 0;line-height:1.3}
+  .sem-vazio{font-size:11px;color:var(--muted)}
+  #card-semana .cardhead .acoes{gap:8px}
+
   @media (max-width:480px){
     .row{flex-direction:column}
     .acoes{width:100%}
@@ -152,6 +160,8 @@
 
       <div class="card" id="card-repasse"></div>
 
+      <div class="card" id="card-semana"></div>
+
       <div class="card">
         <div class="cardhead">
           <h3>Pacientes</h3>
@@ -182,6 +192,7 @@
 
       <div class="card">
         <div class="cardhead"><h3>Cadastrados no mês</h3><input id="visit-busca" class="search" placeholder="Buscar por nome"></div>
+        <div class="cardsub" id="visit-resumo"></div>
         <div id="lista-visitantes"></div>
       </div>
     </section>
@@ -206,7 +217,17 @@ function fmtDataBR(iso){ var p = String(iso).slice(0,10).split('-'); return p[2]
 function fmtDataHora(iso, hora){ var s = fmtDataBR(iso); if (hora) s += ' às ' + String(hora).slice(0,5); return s; }
 var MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 function mesLabel(ym){ var p = ym.split('-'); return MESES_PT[parseInt(p[1],10)-1] + '/' + p[0]; }
-function tipoLabel(t){ return t==='plano' ? 'Plano' : (t==='desafio' ? 'Desafio' : 'Consulta'); }
+var TIPOS = [['plano1','Plano 1'],['plano2','Plano 2'],['consulta1','Consulta 1'],['consulta2','Consulta 2'],['outros','Outros']];
+var TIPOS_REPASSE = ['plano1','consulta1'];   // mês em que a academia repassa ao nutricionista
+var TIPOS_RETORNO = ['plano2','consulta2'];   // retorno do paciente — sem repasse
+function tipoLabel(t){ var m = TIPOS.filter(function(x){ return x[0]===t; })[0]; return m ? m[1] : (t || '—'); }
+function proximoTipo(t){
+  if (t === 'plano1') return 'plano2';
+  if (t === 'plano2') return 'plano1';
+  if (t === 'consulta1') return 'consulta2';
+  if (t === 'consulta2') return 'consulta1';
+  return null;
+}
 
 function waLink(phoneRaw, msg){
   var d = digits(phoneRaw);
@@ -217,6 +238,10 @@ function waLink(phoneRaw, msg){
 function msgExperimental(nome){
   var primeiro = String(nome||'').trim().split(/\s+/)[0] || '';
   return 'Oi ' + primeiro + '! Aqui é da House Fit 💪 Passando pra saber o que você achou da sua aula experimental — foi tudo certinho? Vai ficar muito bem-vindo(a) entre a gente! Quer saber como fica pra se tornar aluno(a)?';
+}
+function msgConfirmacaoNutri(paciente, ag, nutriNome){
+  var primeiro = String(paciente.nome || '').trim().split(/\s+/)[0] || '';
+  return 'Oi ' + primeiro + '! Aqui é da House Fit 💪 Confirmando sua consulta com ' + nutriNome + ' — ' + fmtDataHora(ag.data, ag.hora) + '. Te esperamos! Qualquer imprevisto, é só nos avisar por aqui.';
 }
 function msgConvidado(nome, alunoNome){
   var primeiro = String(nome||'').trim().split(/\s+/)[0] || '';
@@ -252,15 +277,7 @@ async function carregarVisit(){
   VISIT = r.data || [];
 }
 
-/* ---------------- NUTRICIONISTA: cálculo do ciclo ---------------- */
-function statusCicloPlano(p, ym){
-  if (!p.ciclo_inicio) return null;
-  var anchor = String(p.ciclo_inicio).slice(0,7);
-  var pa = anchor.split('-').map(Number), pb = ym.split('-').map(Number);
-  var diff = (pb[0]-pa[0])*12 + (pb[1]-pa[1]);
-  if (diff < 0) return null;
-  return (diff % 2 === 0) ? 'consulta' : 'revisao';
-}
+/* ---------------- NUTRICIONISTA: agendamentos e repasse ---------------- */
 function agendamentosDoMes(pacId, ym){
   return AGEND.filter(function(a){ return a.paciente_id === pacId && String(a.data).slice(0,7) === ym && a.status !== 'cancelado'; });
 }
@@ -270,13 +287,8 @@ function proximoAgendamento(pacId){
     .sort(function(a,b){ return (a.data+(a.hora||'')).localeCompare(b.data+(b.hora||'')); })[0] || null;
 }
 function repasseDoMes(nutri, ym){
-  return PACIENTES.filter(function(p){ return p.nutricionista === nutri && p.ativo !== false; })
-    .map(function(p){
-      var ags = agendamentosDoMes(p.id, ym);
-      var status = (p.tipo === 'plano') ? statusCicloPlano(p, ym) : (ags.length ? 'consulta' : null);
-      return { p: p, ags: ags, status: status };
-    })
-    .filter(function(x){ return x.status === 'consulta'; });
+  return PACIENTES.filter(function(p){ return p.nutricionista === nutri && p.ativo !== false && TIPOS_REPASSE.indexOf(p.tipo) > -1; })
+    .map(function(p){ return { p: p, ags: agendamentosDoMes(p.id, ym) }; });
 }
 
 /* ---------------- NUTRICIONISTA: render ---------------- */
@@ -285,13 +297,13 @@ function renderRepasse(){
   var nome = nutriSel === 'mario' ? 'Dr. Mário' : 'Dra. Tomázia';
   var lista = repasseDoMes(nutriSel, nutriMesSel);
   var h = '<h3>Repasse devido — ' + nome + '</h3>';
-  h += '<div class="cardsub">Pacientes em mês de Consulta (paga) em ' + mesLabel(nutriMesSel) + ' — é quando a academia repassa ao nutricionista. Consulta/Desafio entram aqui quando têm agendamento no mês.</div>';
+  h += '<div class="cardsub">Pacientes marcados como Plano 1 / Consulta 1 — é quando a academia repassa ao nutricionista. Referência: agendamentos de ' + mesLabel(nutriMesSel) + '.</div>';
   if (!lista.length){
-    h += '<div class="vazio">Nenhum paciente em mês de repasse.</div>';
+    h += '<div class="vazio">Nenhum paciente em Plano 1 / Consulta 1 no momento.</div>';
   } else {
     lista.forEach(function(x){
       h += '<div class="row"><span class="rowtxt"><b>' + esc(x.p.nome) + '</b> <span class="muted">· ' + tipoLabel(x.p.tipo) + '</span></span>'
-         + '<span class="tag ok">' + (x.ags.length ? x.ags.length + ' agend.' : 'agendar') + '</span></div>';
+         + '<span class="tag ok">' + (x.ags.length ? x.ags.length + ' agend. no mês' : 'agendar') + '</span></div>';
     });
   }
   box.innerHTML = h;
@@ -299,9 +311,9 @@ function renderRepasse(){
 
 function renderPacienteRow(p){
   var prox = proximoAgendamento(p.id);
-  var st = (p.tipo === 'plano') ? statusCicloPlano(p, nutriMesSel) : null;
-  var stBadge = st === 'consulta' ? '<span class="tag ok">Consulta (repasse)</span>'
-              : st === 'revisao' ? '<span class="tag">Revisão (sem repasse)</span>' : '';
+  var stBadge = TIPOS_REPASSE.indexOf(p.tipo) > -1 ? '<span class="tag ok">' + tipoLabel(p.tipo) + ' (repasse)</span>'
+              : TIPOS_RETORNO.indexOf(p.tipo) > -1 ? '<span class="tag">' + tipoLabel(p.tipo) + ' (retorno)</span>'
+              : '<span class="tag">' + tipoLabel(p.tipo) + '</span>';
   var ex = pacExpand[p.id] || {};
   var h = '<div class="pac-bloco' + (p.ativo === false ? ' inativo' : '') + '">';
   h += '<div class="row"><span class="rowtxt"><b>' + esc(p.nome) + '</b>' + (p.telefone ? ' <span class="muted">· ' + esc(p.telefone) + '</span>' : '') + '</span>' + stBadge + '</div>';
@@ -310,6 +322,13 @@ function renderPacienteRow(p){
   h += '<button class="mini" data-toggle="agendar" data-pac="' + p.id + '">agendar</button>';
   h += '<button class="mini" data-toggle="historico" data-pac="' + p.id + '">histórico</button>';
   h += '<button class="mini" data-toggle="editar" data-pac="' + p.id + '">editar</button>';
+  var nt = proximoTipo(p.tipo);
+  if (nt) h += '<button class="mini" data-flip-tipo="' + p.id + '" data-novo-tipo="' + nt + '">virar ' + tipoLabel(nt) + '</button>';
+  if (prox && p.telefone){
+    var nutriNomeFull = nutriSel === 'mario' ? 'Dr. Mário' : 'Dra. Tomázia';
+    var waConf = waLink(p.telefone, msgConfirmacaoNutri(p, prox, nutriNomeFull));
+    if (waConf) h += '<a class="mini wa" href="' + waConf + '" target="_blank" rel="noopener">Confirmar WhatsApp</a>';
+  }
   h += '</div>';
 
   if (ex.agendar){
@@ -337,9 +356,8 @@ function renderPacienteRow(p){
        + '<div class="field"><label>Nome</label><input class="inp" id="ed-nome-' + p.id + '" value="' + escAttr(p.nome) + '"></div>'
        + '<div class="field"><label>Telefone</label><input class="inp" id="ed-tel-' + p.id + '" value="' + escAttr(p.telefone||'') + '"></div>'
        + '<div class="field"><label>Tipo</label><select id="ed-tipo-' + p.id + '">'
-       + ['plano','consulta','desafio'].map(function(t){ return '<option value="'+t+'"'+(p.tipo===t?' selected':'')+'>'+tipoLabel(t)+'</option>'; }).join('')
+       + TIPOS.map(function(t){ return '<option value="'+t[0]+'"'+(p.tipo===t[0]?' selected':'')+'>'+t[1]+'</option>'; }).join('')
        + '</select></div>'
-       + '<div class="field"><label>Início do ciclo (só p/ Plano)</label><input type="date" id="ed-ciclo-' + p.id + '" value="' + (p.ciclo_inicio||'') + '"></div>'
        + '<label class="chk"><input type="checkbox" id="ed-ativo-' + p.id + '"' + (p.ativo !== false ? ' checked' : '') + '> Ativo</label>'
        + '<div class="acoes"><button class="btn" data-salvar-paciente="' + p.id + '">Salvar</button>'
        + '<button class="btn-outline danger" data-arquivar-paciente="' + p.id + '">' + (p.ativo !== false ? 'Arquivar' : 'Reativar') + '</button></div>'
@@ -352,15 +370,56 @@ function renderPacienteRow(p){
 function renderPacientes(){
   var box = document.getElementById('lista-pacientes');
   var lista = PACIENTES.filter(function(p){ return p.nutricionista === nutriSel; });
-  var grupos = [['plano','Plano'],['consulta','Consulta'],['desafio','Desafio']];
+  var grupos = [
+    { label: 'Plano', match: ['plano1','plano2'] },
+    { label: 'Consulta', match: ['consulta1','consulta2'] },
+    { label: 'Outros', match: ['outros'] }
+  ];
   var h = '';
   grupos.forEach(function(g){
-    var itens = lista.filter(function(p){ return p.tipo === g[0]; }).sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+    var itens = lista.filter(function(p){ return g.match.indexOf(p.tipo) > -1; }).sort(function(a,b){ return a.nome.localeCompare(b.nome); });
     if (!itens.length) return;
-    h += '<div class="setor">' + g[1] + ' (' + itens.length + ')</div>';
+    h += '<div class="setor">' + g.label + ' (' + itens.length + ')</div>';
     itens.forEach(function(p){ h += renderPacienteRow(p); });
   });
   box.innerHTML = h || '<div class="vazio">Nenhum paciente cadastrado ainda.</div>';
+}
+
+/* ---------------- NUTRICIONISTA: agenda visual da semana ---------------- */
+var semanaOffset = 0;
+var DIAS_SEMANA = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+function isoDeData(d){ return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+function diasDaSemana(offset){
+  var hoje = new Date();
+  var diaSemana = hoje.getDay(); // 0 = domingo
+  var seg = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - ((diaSemana+6)%7) + offset*7);
+  var dias = [];
+  for (var i = 0; i < 6; i++){ dias.push(new Date(seg.getFullYear(), seg.getMonth(), seg.getDate()+i)); }
+  return dias;
+}
+function renderSemana(){
+  var box = document.getElementById('card-semana');
+  var dias = diasDaSemana(semanaOffset);
+  var h = '<div class="cardhead"><h3>Agenda da semana</h3>'
+    + '<span class="acoes"><button class="mini" id="sem-ant">‹ anterior</button>'
+    + '<span class="muted" style="font-size:12px">' + fmtDataBR(isoDeData(dias[0])) + ' – ' + fmtDataBR(isoDeData(dias[5])) + '</span>'
+    + '<button class="mini" id="sem-prox">seguinte ›</button></span></div>';
+  h += '<div class="sem-grid">';
+  dias.forEach(function(d, idx){
+    var iso = isoDeData(d);
+    var doDia = AGEND.filter(function(a){ return a.data === iso && a.status !== 'cancelado'; })
+      .map(function(a){ return { a: a, p: PACIENTES.filter(function(x){ return x.id === a.paciente_id; })[0] }; })
+      .filter(function(x){ return x.p && x.p.nutricionista === nutriSel; })
+      .sort(function(x,y){ return (x.a.hora||'').localeCompare(y.a.hora||''); });
+    h += '<div class="sem-dia"><div class="sem-dia-tit">' + DIAS_SEMANA[idx] + ' · ' + fmtDataBR(iso).slice(0,5) + '</div>';
+    if (!doDia.length) h += '<div class="sem-vazio">—</div>';
+    else doDia.forEach(function(x){ h += '<div class="sem-item">' + (x.a.hora ? String(x.a.hora).slice(0,5) + ' ' : '') + esc(x.p.nome) + '</div>'; });
+    h += '</div>';
+  });
+  h += '</div>';
+  box.innerHTML = h;
+  document.getElementById('sem-ant').addEventListener('click', function(){ semanaOffset--; renderSemana(); });
+  document.getElementById('sem-prox').addEventListener('click', function(){ semanaOffset++; renderSemana(); });
 }
 
 /* ---------------- NUTRICIONISTA: eventos ---------------- */
@@ -368,7 +427,7 @@ document.getElementById('seg-nutri').addEventListener('click', function(e){
   var b = e.target.closest('.segbtn'); if (!b) return;
   nutriSel = b.getAttribute('data-nutri');
   document.querySelectorAll('#seg-nutri .segbtn').forEach(function(x){ x.classList.toggle('active', x===b); });
-  renderRepasse(); renderPacientes();
+  renderRepasse(); renderPacientes(); renderSemana();
 });
 
 document.getElementById('btn-novo-paciente').addEventListener('click', function(){
@@ -378,20 +437,15 @@ document.getElementById('btn-novo-paciente').addEventListener('click', function(
   box.innerHTML =
       '<div class="field"><label>Nome</label><input class="inp" id="np-nome"></div>'
     + '<div class="field"><label>Telefone</label><input class="inp" id="np-tel" placeholder="(xx) 9xxxx-xxxx"></div>'
-    + '<div class="field"><label>Tipo</label><select id="np-tipo"><option value="plano">Plano</option><option value="consulta">Consulta</option><option value="desafio">Desafio</option></select></div>'
-    + '<div class="field" id="np-ciclo-wrap"><label>Mês de início do plano</label><input type="date" id="np-ciclo" value="' + todayISO() + '"></div>'
+    + '<div class="field"><label>Tipo</label><select id="np-tipo">' + TIPOS.map(function(t){ return '<option value="'+t[0]+'">'+t[1]+'</option>'; }).join('') + '</select></div>'
     + '<button class="btn" id="np-salvar">Cadastrar paciente</button><span class="msg" id="np-msg"></span>';
-  document.getElementById('np-tipo').addEventListener('change', function(){
-    document.getElementById('np-ciclo-wrap').style.display = (this.value === 'plano') ? '' : 'none';
-  });
   document.getElementById('np-salvar').addEventListener('click', async function(){
     var nome = document.getElementById('np-nome').value.trim();
     if (!nome) return;
     var tel = document.getElementById('np-tel').value.trim();
     var tipo = document.getElementById('np-tipo').value;
-    var ciclo = (tipo === 'plano') ? (document.getElementById('np-ciclo').value || null) : null;
     this.disabled = true;
-    var novo = { id: uid(), nutricionista: nutriSel, nome: nome, telefone: tel || null, tipo: tipo, ciclo_inicio: ciclo, ativo: true };
+    var novo = { id: uid(), nutricionista: nutriSel, nome: nome, telefone: tel || null, tipo: tipo, ativo: true };
     var r = await sb.from('nutri_pacientes').insert(novo).select().single();
     this.disabled = false;
     if (r.error){ document.getElementById('np-msg').textContent = 'Erro ao salvar.'; return; }
@@ -411,6 +465,17 @@ document.getElementById('lista-pacientes').addEventListener('click', async funct
     renderPacientes();
     return;
   }
+  if (v = t.getAttribute('data-flip-tipo')){
+    var novoTipo = t.getAttribute('data-novo-tipo');
+    t.disabled = true;
+    var rf = await sb.from('nutri_pacientes').update({ tipo: novoTipo }).eq('id', v);
+    t.disabled = false;
+    if (rf.error){ alert('Não consegui atualizar o tipo.'); return; }
+    var pf = PACIENTES.filter(function(x){ return x.id === v; })[0];
+    if (pf) pf.tipo = novoTipo;
+    renderRepasse(); renderPacientes();
+    return;
+  }
   if (v = t.getAttribute('data-salvar-agenda')){
     var dEl = document.getElementById('ag-data-' + v), hEl = document.getElementById('ag-hora-' + v);
     if (!dEl.value) return;
@@ -421,14 +486,14 @@ document.getElementById('lista-pacientes').addEventListener('click', async funct
     if (r.error){ alert('Não consegui salvar o agendamento.'); return; }
     AGEND.push(r.data);
     pacExpand[v].agendar = false;
-    renderRepasse(); renderPacientes();
+    renderRepasse(); renderPacientes(); renderSemana();
     return;
   }
   if (v = t.getAttribute('data-del-agenda')){
     if (!confirm('Excluir este agendamento?')) return;
     await sb.from('nutri_agendamentos').delete().eq('id', v);
     AGEND = AGEND.filter(function(a){ return a.id !== v; });
-    renderRepasse(); renderPacientes();
+    renderRepasse(); renderPacientes(); renderSemana();
     return;
   }
   if (v = t.getAttribute('data-salvar-paciente')){
@@ -436,10 +501,9 @@ document.getElementById('lista-pacientes').addEventListener('click', async funct
     if (!nome) return;
     var tel = document.getElementById('ed-tel-' + v).value.trim();
     var tipo = document.getElementById('ed-tipo-' + v).value;
-    var ciclo = document.getElementById('ed-ciclo-' + v).value || null;
     var ativo = document.getElementById('ed-ativo-' + v).checked;
     t.disabled = true;
-    var patch = { nome: nome, telefone: tel || null, tipo: tipo, ciclo_inicio: (tipo === 'plano' ? ciclo : null), ativo: ativo };
+    var patch = { nome: nome, telefone: tel || null, tipo: tipo, ativo: ativo };
     var r = await sb.from('nutri_pacientes').update(patch).eq('id', v);
     t.disabled = false;
     if (r.error){ alert('Não consegui salvar.'); return; }
@@ -489,13 +553,26 @@ function alunosConhecidos(){
 }
 
 /* ---------------- VISITANTES: render ---------------- */
+function atualizarResumoVisitantes(todosDoMes){
+  todosDoMes = todosDoMes || VISIT.filter(function(v){ return v.tipo === visitTipoSel && String(v.data).slice(0,7) === visitMesSel; });
+  var comMsg = todosDoMes.filter(function(v){ return v.mensagem_enviada; }).length;
+  var viraramAluno = todosDoMes.filter(function(v){ return v.virou_aluno; }).length;
+  document.getElementById('visit-resumo').textContent =
+    todosDoMes.length + (todosDoMes.length === 1 ? ' cadastro' : ' cadastros') + ' em ' + mesLabel(visitMesSel)
+    + ' · ' + comMsg + ' com mensagem enviada'
+    + ' · ' + viraramAluno + ' virou' + (viraramAluno === 1 ? '' : 'aram') + ' aluno';
+}
 function renderVisitantes(){
   var box = document.getElementById('lista-visitantes');
   var busca = normaliza(document.getElementById('visit-busca').value);
-  var lista = VISIT.filter(function(v){ return v.tipo === visitTipoSel && String(v.data).slice(0,7) === visitMesSel; })
-    .filter(function(v){ return !busca || normaliza(v.nome).indexOf(busca) > -1; })
+  var todosDoMes = VISIT.filter(function(v){ return v.tipo === visitTipoSel && String(v.data).slice(0,7) === visitMesSel; });
+  var lista = todosDoMes.filter(function(v){ return !busca || normaliza(v.nome).indexOf(busca) > -1; })
     .sort(function(a,b){ return String(b.data).localeCompare(String(a.data)); });
+
   document.getElementById('visit-titulo').textContent = visitTipoSel === 'experimental' ? 'Nova aula experimental' : 'Novo convidado';
+
+  atualizarResumoVisitantes(todosDoMes);
+
   if (!lista.length){ box.innerHTML = '<div class="vazio">Nenhum cadastro em ' + mesLabel(visitMesSel) + '.</div>'; return; }
   var h = '';
   lista.forEach(function(v){
@@ -505,6 +582,7 @@ function renderVisitantes(){
        + (v.telefone ? '<br><span class="muted">' + esc(v.telefone) + '</span>' : '') + '</span>';
     h += '<span class="acoes">';
     h += '<label class="mini-chk"><input type="checkbox" data-msg-enviada="' + v.id + '"' + (v.mensagem_enviada ? ' checked' : '') + '> msg enviada</label>';
+    h += '<label class="mini-chk"><input type="checkbox" data-virou-aluno="' + v.id + '"' + (v.virou_aluno ? ' checked' : '') + '> virou aluno</label>';
     if (wa) h += '<a class="mini wa" href="' + wa + '" target="_blank" rel="noopener">WhatsApp</a>';
     h += '</span></div>';
   });
@@ -588,12 +666,23 @@ document.getElementById('btn-novo-visitante').addEventListener('click', function
 });
 
 document.getElementById('lista-visitantes').addEventListener('change', async function(e){
-  var id = e.target.getAttribute('data-msg-enviada');
-  if (!id) return;
   var checked = e.target.checked;
-  await sb.from('visitantes').update({ mensagem_enviada: checked }).eq('id', id);
-  var v = VISIT.filter(function(x){ return x.id === id; })[0];
-  if (v) v.mensagem_enviada = checked;
+  var idMsg = e.target.getAttribute('data-msg-enviada');
+  var idAluno = e.target.getAttribute('data-virou-aluno');
+  if (idMsg){
+    await sb.from('visitantes').update({ mensagem_enviada: checked }).eq('id', idMsg);
+    var v1 = VISIT.filter(function(x){ return x.id === idMsg; })[0];
+    if (v1) v1.mensagem_enviada = checked;
+    atualizarResumoVisitantes();
+    return;
+  }
+  if (idAluno){
+    await sb.from('visitantes').update({ virou_aluno: checked }).eq('id', idAluno);
+    var v2 = VISIT.filter(function(x){ return x.id === idAluno; })[0];
+    if (v2) v2.virou_aluno = checked;
+    atualizarResumoVisitantes();
+    return;
+  }
 });
 
 /* ---------------- abas principais ---------------- */
@@ -610,7 +699,7 @@ async function bootApp(){
   document.getElementById('tela-login').style.display = 'none';
   document.getElementById('app').style.display = '';
   await Promise.all([carregarNutri(), carregarVisit()]);
-  renderRepasse(); renderPacientes(); renderVisitantes();
+  renderRepasse(); renderPacientes(); renderSemana(); renderVisitantes();
 }
 function mostrarLogin(msg){
   document.getElementById('app').style.display = 'none';
