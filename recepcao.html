@@ -165,7 +165,7 @@
 
       <div class="card">
         <div id="card-agenda-mes"></div>
-        <button class="btn" id="btn-novo-paciente" style="margin-top:10px">+ Novo paciente</button>
+        <div class="acoes" style="margin-top:10px"><button class="btn" id="btn-novo-paciente">+ Novo paciente</button><button class="btn-outline" id="btn-copiar-agenda">Copiar agenda</button><span class="msg" id="copiar-agenda-msg"></span></div>
         <div id="form-novo-paciente" class="subform" hidden></div>
       </div>
 
@@ -403,12 +403,46 @@ function renderAgendaMes(){
   box.innerHTML = h;
 }
 
+function textoAgendaMes(){
+  var pacientesNutri = PACIENTES.filter(function(p){ return p.nutricionista === nutriSel && p.ativo !== false; });
+  var porId = {};
+  pacientesNutri.forEach(function(p){ porId[p.id] = p; });
+  var ags = AGEND.filter(function(a){
+    return String(a.data).slice(0,7) === nutriMesSel && a.status !== 'cancelado' && a.status !== 'recusou' && porId[a.paciente_id];
+  }).sort(function(a,b){ return (a.data+(a.hora||'')).localeCompare(b.data+(b.hora||'')); });
+  if (!ags.length) return '';
+  var porDia = {};
+  ags.forEach(function(a){ (porDia[a.data] = porDia[a.data] || []).push(a); });
+  var dias = Object.keys(porDia).sort();
+  var blocos = dias.map(function(d){
+    var linhas = porDia[d].map(function(a){
+      var p = porId[a.paciente_id];
+      return '*' + p.nome + '* - ' + (a.hora ? String(a.hora).slice(0,5) : 'sem horário');
+    });
+    return '*Dia ' + fmtDataBR(d).slice(0,5) + '*\n' + linhas.join('\n');
+  });
+  return blocos.join('\n\n');
+}
+
 /* ---------------- NUTRICIONISTA: eventos ---------------- */
 document.getElementById('seg-nutri').addEventListener('click', function(e){
   var b = e.target.closest('.segbtn'); if (!b) return;
   nutriSel = b.getAttribute('data-nutri');
   document.querySelectorAll('#seg-nutri .segbtn').forEach(function(x){ x.classList.toggle('active', x===b); });
   renderRepasse(); renderAgendaMes();
+});
+
+document.getElementById('btn-copiar-agenda').addEventListener('click', async function(){
+  var msgEl = document.getElementById('copiar-agenda-msg');
+  var texto = textoAgendaMes();
+  if (!texto){ if (msgEl) msgEl.textContent = 'Nenhum agendamento neste mês.'; return; }
+  try{
+    await navigator.clipboard.writeText(texto);
+    if (msgEl) msgEl.textContent = 'Agenda copiada!';
+  }catch(e){
+    if (msgEl) msgEl.textContent = 'Não consegui copiar — tenta de novo.';
+  }
+  setTimeout(function(){ if (msgEl) msgEl.textContent = ''; }, 3000);
 });
 
 document.getElementById('btn-novo-paciente').addEventListener('click', function(){
