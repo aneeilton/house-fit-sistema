@@ -3,6 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Recepção — House Fit</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%8B%E2%80%8D%E2%99%80%EF%B8%8F%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
@@ -66,6 +67,10 @@
   .cardhead h3{margin:0}
 
   .setor{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 6px}
+
+  .subcard{background:var(--page);border-radius:10px;padding:8px 10px;margin-bottom:10px}
+  .subcard:last-child{margin-bottom:0}
+  .subcard-h{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;padding:0 4px}
   .setor:first-child{margin-top:0}
 
   .pac-bloco{border-top:1px solid var(--grid);padding:10px 0}
@@ -424,8 +429,9 @@ function textoAgendaMes(){
   var pacientesNutri = PACIENTES.filter(function(p){ return p.nutricionista === nutriSel && p.ativo !== false; });
   var porId = {};
   pacientesNutri.forEach(function(p){ porId[p.id] = p; });
+  var hoje = todayISO();
   var ags = AGEND.filter(function(a){
-    return String(a.data).slice(0,7) === nutriMesSel && a.status !== 'cancelado' && a.status !== 'recusou' && porId[a.paciente_id];
+    return String(a.data).slice(0,7) === nutriMesSel && String(a.data).slice(0,10) >= hoje && a.status !== 'cancelado' && a.status !== 'recusou' && porId[a.paciente_id];
   }).sort(function(a,b){ return (a.data+(a.hora||'')).localeCompare(b.data+(b.hora||'')); });
   if (!ags.length) return '';
   var porDia = {};
@@ -618,18 +624,32 @@ function renderVisitantes(){
   atualizarResumoVisitantes(todosDoMes);
 
   if (!lista.length){ box.innerHTML = '<div class="vazio">Nenhum cadastro em ' + mesLabel(visitMesSel) + '.</div>'; return; }
-  var h = '';
-  lista.forEach(function(v){
+
+  function linhaHtml(v){
     var wa = waLink(v.telefone, visitTipoSel === 'experimental' ? msgExperimental(v.nome) : msgConvidado(v.nome, v.aluno_convite));
-    h += '<div class="row visit-row">';
-    h += '<span class="rowtxt"><b>' + esc(v.nome) + '</b> <span class="muted">· ' + fmtDataBR(v.data) + (v.atividade ? ' · ' + esc(v.atividade) : '') + (v.aluno_convite ? ' · trazido por ' + esc(v.aluno_convite) : '') + '</span>'
+    var h = '<div class="row visit-row">';
+    h += '<span class="rowtxt"><b>' + fmtDataBR(v.data) + '</b> <span class="muted">·</span> ' + esc(v.nome) + (v.aluno_convite ? '<span class="muted"> · trazido por ' + esc(v.aluno_convite) + '</span>' : '')
        + (v.telefone ? '<br><span class="muted">' + esc(v.telefone) + '</span>' : '') + '</span>';
     h += '<span class="acoes">';
     h += '<label class="mini-chk"><input type="checkbox" data-msg-enviada="' + v.id + '"' + (v.mensagem_enviada ? ' checked' : '') + '> msg enviada</label>';
     h += '<label class="mini-chk"><input type="checkbox" data-virou-aluno="' + v.id + '"' + (v.virou_aluno ? ' checked' : '') + '> virou aluno</label>';
     if (wa) h += '<a class="mini wa" href="' + wa + '" target="_blank" rel="noopener">WhatsApp</a>';
     h += '</span></div>';
-  });
+    return h;
+  }
+
+  var h = '';
+  if (visitTipoSel === 'experimental'){
+    var porAtividade = {};
+    lista.forEach(function(v){ var k = v.atividade || 'Outros'; (porAtividade[k] = porAtividade[k] || []).push(v); });
+    Object.keys(porAtividade).sort().forEach(function(k){
+      h += '<div class="subcard"><div class="subcard-h">' + esc(k) + ' <span class="muted">(' + porAtividade[k].length + ')</span></div>';
+      h += porAtividade[k].map(linhaHtml).join('');
+      h += '</div>';
+    });
+  } else {
+    h += lista.map(linhaHtml).join('');
+  }
   box.innerHTML = h;
 }
 
