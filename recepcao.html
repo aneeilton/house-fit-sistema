@@ -45,9 +45,9 @@
   .brand-logo{height:34px;width:auto;display:block}
   .btn-ghost{background:none;border:1px solid var(--border);border-radius:10px;padding:7px 12px;font:inherit;font-size:12px;color:var(--text2);cursor:pointer}
 
-  .maintabs{display:flex;gap:2px;border-bottom:1px solid var(--grid);margin-bottom:16px}
-  .mtab{flex:1;background:none;border:0;padding:11px 8px;font:inherit;font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:.03em;color:var(--text2);border-bottom:2px solid transparent;cursor:pointer}
-  .mtab.active{color:var(--accent-ink);border-bottom-color:var(--accent-ink)}
+  .maintabs{display:flex;background:var(--surface);box-shadow:var(--shadow);border-radius:10px;padding:3px;gap:2px;margin-bottom:16px}
+  .mtab{flex:1;background:none;border:0;padding:8px 14px;font:inherit;font-size:12.5px;font-weight:500;color:var(--text2);border-radius:7px;cursor:pointer}
+  .mtab.active{background:var(--accent);color:#fff}
 
   .area{display:none}
   .area.active{display:block}
@@ -81,7 +81,7 @@
   .tag.ok{background:color-mix(in srgb, var(--good) 15%, transparent);color:var(--good);border-color:transparent}
   .tag.off{background:color-mix(in srgb, var(--bad) 15%, transparent);color:var(--bad);border-color:transparent}
 
-  .icon-link{background:none;border:0;cursor:pointer;font-size:13px;padding:1px 3px;line-height:1;margin-right:1px}
+  .icon-link{background:none;border:0;cursor:pointer;font-size:13px;padding:1px 3px;line-height:1;margin-right:1px;text-decoration:none;display:inline-block}
 
   .mini{background:none;border:1px solid var(--border);color:var(--text2);font:inherit;font-size:11.5px;padding:5px 10px;border-radius:999px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
   .mini.danger{color:var(--bad);border-color:transparent}
@@ -167,13 +167,6 @@
         <div id="card-agenda-mes"></div>
         <button class="btn" id="btn-novo-paciente" style="margin-top:10px">+ Novo paciente</button>
         <div id="form-novo-paciente" class="subform" hidden></div>
-      </div>
-
-      <div class="card">
-        <div class="cardhead">
-          <h3>Pacientes</h3>
-        </div>
-        <div id="lista-pacientes"></div>
       </div>
 
       <div class="card" id="card-repasse"></div>
@@ -319,11 +312,24 @@ function renderRepasse(){
 function naoAgendouStatus(pacId, ym){
   return AGEND.some(function(a){ return a.paciente_id === pacId && a.status === 'recusou' && String(a.data).slice(0,7) === ym; });
 }
-function formAgendarHtml(p, naoAgendouAtual){
-  return '<div class="field"><label>Data</label><input type="date" id="ag-data-' + p.id + '" value="' + todayISO() + '"></div>'
+function formAgendarHtml(p, naoAgendouAtual, ym){
+  var doMes = AGEND.filter(function(a){ return a.paciente_id === p.id && a.status !== 'recusou' && String(a.data).slice(0,7) === ym; })
+    .sort(function(a,b){ return (a.data+(a.hora||'')).localeCompare(b.data+(b.hora||'')); });
+  var h = '';
+  if (doMes.length){
+    h += '<div class="rowsub">Agendamentos do mês</div>';
+    doMes.forEach(function(a){
+      h += '<div class="row"><span class="rowtxt">' + fmtDataHora(a.data, a.hora) + '</span>'
+         + '<span class="acoes"><select class="mini-sel" data-status-agenda="' + a.id + '">'
+         + ['agendado','realizado','faltou','cancelado'].map(function(s){ return '<option value="'+s+'"'+(a.status===s?' selected':'')+'>'+s+'</option>'; }).join('')
+         + '</select> <button class="mini danger" data-del-agenda="' + a.id + '">excluir</button></span></div>';
+    });
+  }
+  h += '<div class="field"><label>Nova data</label><input type="date" id="ag-data-' + p.id + '" value="' + todayISO() + '"></div>'
     + '<div class="field"><label>Hora</label><input type="time" id="ag-hora-' + p.id + '"></div>'
     + '<div class="acoes"><button class="btn" data-salvar-agenda="' + p.id + '">Salvar agendamento</button>'
     + '<button class="btn-outline" data-nao-agendou="' + p.id + '">' + (naoAgendouAtual ? 'Desmarcar "não agendou"' : 'Não quis agendar este mês') + '</button></div>';
+  return h;
 }
 function formEditarHtml(p){
   return '<div class="field"><label>Nome</label><input class="inp" id="ed-nome-' + p.id + '" value="' + escAttr(p.nome) + '"></div>'
@@ -336,114 +342,64 @@ function formEditarHtml(p){
     + '<button class="btn-outline danger" data-arquivar-paciente="' + p.id + '">' + (p.ativo !== false ? 'Arquivar' : 'Reativar') + '</button></div>';
 }
 
-function renderPacienteRow(p){
-  var prox = proximoAgendamento(p.id);
-  var stBadge = TIPOS_REPASSE.indexOf(p.tipo) > -1 ? '<span class="tag ok">' + tipoLabel(p.tipo) + ' (repasse)</span>'
-              : TIPOS_RETORNO.indexOf(p.tipo) > -1 ? '<span class="tag">' + tipoLabel(p.tipo) + ' (retorno)</span>'
-              : '<span class="tag">' + tipoLabel(p.tipo) + '</span>';
-  var ex = pacExpand[p.id] || {};
-  var h = '<div class="pac-bloco' + (p.ativo === false ? ' inativo' : '') + '">';
-  h += '<div class="row"><span class="rowtxt"><b>' + esc(p.nome) + '</b>' + (p.telefone ? ' <span class="muted">· ' + esc(p.telefone) + '</span>' : '') + '</span>' + stBadge + '</div>';
-  h += '<div class="rowsub">' + (prox ? 'Próximo: ' + fmtDataHora(prox.data, prox.hora) : 'Sem agendamento futuro') + '</div>';
-  h += '<div class="acoes">';
-  h += '<button class="mini" data-toggle="agendar" data-pac="' + p.id + '">agendar</button>';
-  h += '<button class="mini" data-toggle="historico" data-pac="' + p.id + '">histórico</button>';
-  h += '<button class="mini" data-toggle="editar" data-pac="' + p.id + '">editar</button>';
-  var nt = proximoTipo(p.tipo);
-  if (nt) h += '<button class="mini" data-flip-tipo="' + p.id + '" data-novo-tipo="' + nt + '">virar ' + tipoLabel(nt) + '</button>';
-  if (prox && p.telefone){
-    var nutriNomeFull = nutriSel === 'mario' ? 'Dr. Mário' : 'Dra. Tomázia';
-    var waConf = waLink(p.telefone, msgConfirmacaoNutri(p, prox, nutriNomeFull));
-    if (waConf) h += '<a class="mini wa" href="' + waConf + '" target="_blank" rel="noopener">Confirmar WhatsApp</a>';
-  }
-  h += '</div>';
-
-  if (ex.agendar){
-    h += '<div class="subform">' + formAgendarHtml(p, naoAgendouStatus(p.id, nutriMesSel)) + '</div>';
-  }
-  if (ex.historico){
-    var hist = AGEND.filter(function(a){ return a.paciente_id === p.id && a.status !== 'recusou'; })
-      .sort(function(a,b){ return (b.data+(b.hora||'')).localeCompare(a.data+(a.hora||'')); });
-    h += '<div class="subform">';
-    if (!hist.length) h += '<div class="vazio">Sem agendamentos ainda.</div>';
-    hist.forEach(function(a){
-      h += '<div class="row"><span class="rowtxt">' + fmtDataHora(a.data, a.hora) + '</span>'
-         + '<span class="acoes"><select class="mini-sel" data-status-agenda="' + a.id + '">'
-         + ['agendado','realizado','faltou','cancelado'].map(function(s){ return '<option value="'+s+'"'+(a.status===s?' selected':'')+'>'+s+'</option>'; }).join('')
-         + '</select> <button class="mini danger" data-del-agenda="' + a.id + '">excluir</button></span></div>';
-    });
-    h += '</div>';
-  }
-  if (ex.editar){
-    h += '<div class="subform">' + formEditarHtml(p) + '</div>';
-  }
-  h += '</div>';
-  return h;
-}
-
-function renderPacientes(){
-  var box = document.getElementById('lista-pacientes');
-  var todos = PACIENTES.filter(function(p){ return p.nutricionista === nutriSel; });
-  var ativos = todos.filter(function(p){ return p.ativo !== false; });
-  var arquivados = todos.filter(function(p){ return p.ativo === false; });
-  var grupos = [
-    { label: 'Plano', match: ['plano1','plano2'] },
-    { label: 'Consulta', match: ['consulta1','consulta2'] },
-    { label: 'Outros', match: ['outros'] }
-  ];
-  var h = '';
-  grupos.forEach(function(g){
-    var itens = ativos.filter(function(p){ return g.match.indexOf(p.tipo) > -1; }).sort(function(a,b){ return a.nome.localeCompare(b.nome); });
-    if (!itens.length) return;
-    h += '<div class="setor">' + g.label + ' (' + itens.length + ')</div>';
-    itens.forEach(function(p){ h += renderPacienteRow(p); });
-  });
-  if (arquivados.length){
-    h += '<div class="setor">Arquivados (' + arquivados.length + ')</div>';
-    arquivados.sort(function(a,b){ return a.nome.localeCompare(b.nome); }).forEach(function(p){ h += renderPacienteRow(p); });
-  }
-  box.innerHTML = h || '<div class="vazio">Nenhum paciente cadastrado ainda.</div>';
-}
-
 /* ---------------- NUTRICIONISTA: agenda visual do mês ---------------- */
 function semanaDoMes(dia){ return Math.min(4, Math.ceil(dia / 7)); }
 function renderAgendaMes(){
   var box = document.getElementById('card-agenda-mes');
+  var nutriNomeFull = nutriSel === 'mario' ? 'Dr. Mário' : 'Dra. Tomázia';
   var pacientesNutri = PACIENTES.filter(function(p){ return p.nutricionista === nutriSel && p.ativo !== false; })
-    .sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+    .map(function(p){ return { p: p, off: naoAgendouStatus(p.id, nutriMesSel) }; })
+    .sort(function(a,b){ return (a.off === b.off) ? a.p.nome.localeCompare(b.p.nome) : (a.off ? 1 : -1); });
   var agsDoMes = AGEND.filter(function(a){ return String(a.data).slice(0,7) === nutriMesSel && a.status !== 'cancelado' && a.status !== 'recusou'; });
+  var arquivados = PACIENTES.filter(function(p){ return p.nutricionista === nutriSel && p.ativo === false; })
+    .sort(function(a,b){ return a.nome.localeCompare(b.nome); });
 
   var h = '<div class="cardhead"><h3>Agenda do mês</h3><span class="muted" style="font-size:12px">' + mesLabel(nutriMesSel) + '</span></div>';
   if (!pacientesNutri.length){
     h += '<div class="vazio">Nenhum paciente ativo cadastrado ainda.</div>';
-    box.innerHTML = h;
-    return;
-  }
-  h += '<div class="mesx"><table class="mestbl"><thead><tr><th>Paciente</th><th>Semana 1</th><th>Semana 2</th><th>Semana 3</th><th>Semana 4</th></tr></thead><tbody>';
-  pacientesNutri.forEach(function(p){
-    var ex = pacExpand[p.id] || {};
-    var naoAgendou = naoAgendouStatus(p.id, nutriMesSel);
-    var porSemana = { 1: [], 2: [], 3: [], 4: [] };
-    agsDoMes.filter(function(a){ return a.paciente_id === p.id; }).forEach(function(a){
-      var dia = parseInt(String(a.data).slice(8,10), 10);
-      porSemana[semanaDoMes(dia)].push(a);
+  } else {
+    h += '<div class="mesx"><table class="mestbl"><thead><tr><th>Paciente</th><th>Semana 1</th><th>Semana 2</th><th>Semana 3</th><th>Semana 4</th></tr></thead><tbody>';
+    pacientesNutri.forEach(function(item){
+      var p = item.p, naoAgendou = item.off;
+      var ex = pacExpand[p.id] || {};
+      var porSemana = { 1: [], 2: [], 3: [], 4: [] };
+      agsDoMes.filter(function(a){ return a.paciente_id === p.id; }).forEach(function(a){
+        var dia = parseInt(String(a.data).slice(8,10), 10);
+        porSemana[semanaDoMes(dia)].push(a);
+      });
+      h += '<tr><td>'
+         + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Agendar">📅</button>'
+         + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
+         + esc(p.nome) + (naoAgendou ? ' <span class="tag off">não agendou</span>' : '') + '</td>';
+      for (var s = 1; s <= 4; s++){
+        var cel = porSemana[s]
+          .sort(function(a,b){ return (a.hora||'').localeCompare(b.hora||''); })
+          .map(function(a){
+            var texto = fmtDataBR(a.data).slice(0,5) + (a.hora ? ' ' + String(a.hora).slice(0,5) : '');
+            var wa = p.telefone ? waLink(p.telefone, msgConfirmacaoNutri(p, a, nutriNomeFull)) : null;
+            return texto + (wa ? ' <a class="icon-link wa" href="' + wa + '" target="_blank" rel="noopener" title="Confirmar WhatsApp">💬</a>' : '');
+          })
+          .join('<br>');
+        h += '<td>' + (cel || '—') + '</td>';
+      }
+      h += '</tr>';
+      if (ex.agendar) h += '<tr class="mes-expand"><td colspan="5">' + formAgendarHtml(p, naoAgendou, nutriMesSel) + '</td></tr>';
+      if (ex.editar) h += '<tr class="mes-expand"><td colspan="5">' + formEditarHtml(p) + '</td></tr>';
     });
-    h += '<tr><td>'
-       + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Agendar">📅</button>'
-       + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
-       + esc(p.nome) + (naoAgendou ? ' <span class="tag off">não agendou</span>' : '') + '</td>';
-    for (var s = 1; s <= 4; s++){
-      var cel = porSemana[s]
-        .sort(function(a,b){ return (a.hora||'').localeCompare(b.hora||''); })
-        .map(function(a){ return fmtDataBR(a.data).slice(0,5) + (a.hora ? ' ' + String(a.hora).slice(0,5) : ''); })
-        .join('<br>');
-      h += '<td>' + (cel || '—') + '</td>';
+    h += '</tbody></table></div>';
+  }
+
+  if (arquivados.length){
+    var exA = !!pacExpand.__arquivados;
+    h += '<div class="acoes" style="margin-top:10px"><button class="mini" id="toggle-arquivados">' + (exA ? '▾' : '▸') + ' Arquivados (' + arquivados.length + ')</button></div>';
+    if (exA){
+      arquivados.forEach(function(p){
+        h += '<div class="row"><span class="rowtxt">' + esc(p.nome) + '</span>'
+           + '<button class="mini" data-arquivar-paciente="' + p.id + '">Reativar</button></div>';
+      });
     }
-    h += '</tr>';
-    if (ex.agendar) h += '<tr class="mes-expand"><td colspan="5">' + formAgendarHtml(p, naoAgendou) + '</td></tr>';
-    if (ex.editar) h += '<tr class="mes-expand"><td colspan="5">' + formEditarHtml(p) + '</td></tr>';
-  });
-  h += '</tbody></table></div>';
+  }
+
   box.innerHTML = h;
 }
 
@@ -452,7 +408,7 @@ document.getElementById('seg-nutri').addEventListener('click', function(e){
   var b = e.target.closest('.segbtn'); if (!b) return;
   nutriSel = b.getAttribute('data-nutri');
   document.querySelectorAll('#seg-nutri .segbtn').forEach(function(x){ x.classList.toggle('active', x===b); });
-  renderRepasse(); renderPacientes(); renderAgendaMes();
+  renderRepasse(); renderAgendaMes();
 });
 
 document.getElementById('btn-novo-paciente').addEventListener('click', function(){
@@ -476,30 +432,24 @@ document.getElementById('btn-novo-paciente').addEventListener('click', function(
     if (r.error){ document.getElementById('np-msg').textContent = 'Erro ao salvar.'; return; }
     PACIENTES.push(r.data);
     box.hidden = true;
-    renderRepasse(); renderPacientes();
+    renderRepasse(); renderAgendaMes();
   });
 });
 
 async function onPacienteAreaClick(e){
-  var t = e.target.closest ? e.target.closest('[data-toggle],[data-flip-tipo],[data-salvar-agenda],[data-del-agenda],[data-salvar-paciente],[data-arquivar-paciente],[data-nao-agendou]') : null;
+  if (e.target && e.target.id === 'toggle-arquivados'){
+    pacExpand.__arquivados = !pacExpand.__arquivados;
+    renderAgendaMes();
+    return;
+  }
+  var t = e.target.closest ? e.target.closest('[data-toggle],[data-salvar-agenda],[data-del-agenda],[data-salvar-paciente],[data-arquivar-paciente],[data-nao-agendou]') : null;
   if (!t) return;
   var v;
   if (v = t.getAttribute('data-toggle')){
     var pacId = t.getAttribute('data-pac');
     pacExpand[pacId] = pacExpand[pacId] || {};
     pacExpand[pacId][v] = !pacExpand[pacId][v];
-    renderPacientes(); renderAgendaMes();
-    return;
-  }
-  if (v = t.getAttribute('data-flip-tipo')){
-    var novoTipo = t.getAttribute('data-novo-tipo');
-    t.disabled = true;
-    var rf = await sb.from('nutri_pacientes').update({ tipo: novoTipo }).eq('id', v);
-    t.disabled = false;
-    if (rf.error){ alert('Não consegui atualizar o tipo.'); return; }
-    var pf = PACIENTES.filter(function(x){ return x.id === v; })[0];
-    if (pf) pf.tipo = novoTipo;
-    renderRepasse(); renderPacientes();
+    renderAgendaMes();
     return;
   }
   if (v = t.getAttribute('data-salvar-agenda')){
@@ -512,7 +462,7 @@ async function onPacienteAreaClick(e){
     if (r.error){ alert('Não consegui salvar o agendamento.'); return; }
     AGEND.push(r.data);
     pacExpand[v].agendar = false;
-    renderRepasse(); renderPacientes(); renderAgendaMes();
+    renderRepasse(); renderAgendaMes();
     return;
   }
   if (v = t.getAttribute('data-nao-agendou')){
@@ -528,14 +478,14 @@ async function onPacienteAreaClick(e){
       if (!rn.error) AGEND.push(rn.data);
     }
     t.disabled = false;
-    renderRepasse(); renderPacientes(); renderAgendaMes();
+    renderRepasse(); renderAgendaMes();
     return;
   }
   if (v = t.getAttribute('data-del-agenda')){
     if (!confirm('Excluir este agendamento?')) return;
     await sb.from('nutri_agendamentos').delete().eq('id', v);
     AGEND = AGEND.filter(function(a){ return a.id !== v; });
-    renderRepasse(); renderPacientes(); renderAgendaMes();
+    renderRepasse(); renderAgendaMes();
     return;
   }
   if (v = t.getAttribute('data-salvar-paciente')){
@@ -552,7 +502,7 @@ async function onPacienteAreaClick(e){
     var p = PACIENTES.filter(function(x){ return x.id === v; })[0];
     if (p) Object.assign(p, patch);
     pacExpand[v].editar = false;
-    renderRepasse(); renderPacientes(); renderAgendaMes();
+    renderRepasse(); renderAgendaMes();
     return;
   }
   if (v = t.getAttribute('data-arquivar-paciente')){
@@ -561,13 +511,12 @@ async function onPacienteAreaClick(e){
     var novoAtivo = !(p2.ativo !== false);
     await sb.from('nutri_pacientes').update({ ativo: novoAtivo }).eq('id', v);
     p2.ativo = novoAtivo;
-    renderPacientes(); renderAgendaMes();
+    renderAgendaMes();
     return;
   }
 }
-document.getElementById('lista-pacientes').addEventListener('click', onPacienteAreaClick);
 document.getElementById('card-agenda-mes').addEventListener('click', onPacienteAreaClick);
-document.getElementById('lista-pacientes').addEventListener('change', async function(e){
+document.getElementById('card-agenda-mes').addEventListener('change', async function(e){
   var id = e.target.getAttribute('data-status-agenda');
   if (!id) return;
   var novoStatus = e.target.value;
@@ -743,7 +692,7 @@ async function bootApp(){
   document.getElementById('tela-login').style.display = 'none';
   document.getElementById('app').style.display = '';
   await Promise.all([carregarNutri(), carregarVisit()]);
-  renderRepasse(); renderPacientes(); renderAgendaMes(); renderVisitantes();
+  renderRepasse(); renderAgendaMes(); renderVisitantes();
 }
 function mostrarLogin(msg){
   document.getElementById('app').style.display = 'none';
@@ -768,7 +717,7 @@ document.getElementById('btn-sair').addEventListener('click', async function(){
 });
 
 (async function init(){
-  popularMeses(document.getElementById('nutri-mes'), nutriMesSel, function(v){ nutriMesSel = v; renderRepasse(); renderPacientes(); renderAgendaMes(); });
+  popularMeses(document.getElementById('nutri-mes'), nutriMesSel, function(v){ nutriMesSel = v; renderRepasse(); renderAgendaMes(); });
   popularMeses(document.getElementById('visit-mes'), visitMesSel, function(v){ visitMesSel = v; renderVisitantes(); });
   try{
     var s = await sb.auth.getSession();
