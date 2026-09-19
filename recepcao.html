@@ -239,9 +239,26 @@ function msgExperimental(nome){
   var primeiro = String(nome||'').trim().split(/\s+/)[0] || '';
   return 'Oi ' + primeiro + '! Aqui é da House Fit 💪 Passando pra saber o que você achou da sua aula experimental — foi tudo certinho? Vai ficar muito bem-vindo(a) entre a gente! Quer saber como fica pra se tornar aluno(a)?';
 }
+var DIAS_SEMANA_MSG = [
+  {n:'domingo', prox:'próximo'},
+  {n:'segunda-feira', prox:'próxima'},
+  {n:'terça-feira', prox:'próxima'},
+  {n:'quarta-feira', prox:'próxima'},
+  {n:'quinta-feira', prox:'próxima'},
+  {n:'sexta-feira', prox:'próxima'},
+  {n:'sábado', prox:'próximo'}
+];
 function msgConfirmacaoNutri(paciente, ag, nutriNome){
   var primeiro = String(paciente.nome || '').trim().split(/\s+/)[0] || '';
-  return 'Oi ' + primeiro + '! Aqui é da House Fit 💪 Confirmando sua consulta com ' + nutriNome + ' — ' + fmtDataHora(ag.data, ag.hora) + '. Te esperamos! Qualquer imprevisto, é só nos avisar por aqui.';
+  var dt = new Date(String(ag.data).slice(0,10) + 'T00:00:00');
+  var diaInfo = DIAS_SEMANA_MSG[dt.getDay()];
+  var dataFmt = fmtDataBR(ag.data).slice(0,5);
+  var horaFmt = ag.hora ? String(ag.hora).slice(0,5) : '';
+  return 'Oi ' + primeiro + ', tudo bem? Aqui é da House Fit\n'
+    + 'Estamos passando pra confirmar sua consulta com ' + nutriNome + '\n'
+    + 'na ' + diaInfo.prox + ' ' + diaInfo.n + ', dia ' + dataFmt + (horaFmt ? ' às ' + horaFmt : '') + '.\n'
+    + 'Te esperamos aqui.\n'
+    + 'Qualquer imprevisto, avisa a gente.';
 }
 function msgConvidado(nome, alunoNome){
   var primeiro = String(nome||'').trim().split(/\s+/)[0] || '';
@@ -417,7 +434,7 @@ function textoAgendaMes(){
   var blocos = dias.map(function(d){
     var linhas = porDia[d].map(function(a){
       var p = porId[a.paciente_id];
-      return '*' + p.nome + '* - ' + (a.hora ? String(a.hora).slice(0,5) : 'sem horário');
+      return '*' + (a.hora ? String(a.hora).slice(0,5) : 'sem horário') + '* - ' + p.nome;
     });
     return '*Dia ' + fmtDataBR(d).slice(0,5) + '*\n' + linhas.join('\n');
   });
