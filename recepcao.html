@@ -625,10 +625,10 @@ function renderVisitantes(){
 
   if (!lista.length){ box.innerHTML = '<div class="vazio">Nenhum cadastro em ' + mesLabel(visitMesSel) + '.</div>'; return; }
 
-  function linhaHtml(v){
+  function linhaHtml(v, ocultarAlunoConvite){
     var wa = waLink(v.telefone, visitTipoSel === 'experimental' ? msgExperimental(v.nome) : msgConvidado(v.nome, v.aluno_convite));
     var h = '<div class="row visit-row">';
-    h += '<span class="rowtxt"><b>' + fmtDataBR(v.data) + '</b> <span class="muted">·</span> ' + esc(v.nome) + (v.aluno_convite ? '<span class="muted"> · trazido por ' + esc(v.aluno_convite) + '</span>' : '')
+    h += '<span class="rowtxt"><b>' + fmtDataBR(v.data) + '</b> <span class="muted">·</span> ' + esc(v.nome) + (v.aluno_convite && !ocultarAlunoConvite ? '<span class="muted"> · trazido por ' + esc(v.aluno_convite) + '</span>' : '')
        + (v.telefone ? '<br><span class="muted">' + esc(v.telefone) + '</span>' : '') + '</span>';
     h += '<span class="acoes">';
     h += '<label class="mini-chk"><input type="checkbox" data-msg-enviada="' + v.id + '"' + (v.mensagem_enviada ? ' checked' : '') + '> msg enviada</label>';
@@ -644,11 +644,17 @@ function renderVisitantes(){
     lista.forEach(function(v){ var k = v.atividade || 'Outros'; (porAtividade[k] = porAtividade[k] || []).push(v); });
     Object.keys(porAtividade).sort().forEach(function(k){
       h += '<div class="subcard"><div class="subcard-h">' + esc(k) + ' <span class="muted">(' + porAtividade[k].length + ')</span></div>';
-      h += porAtividade[k].map(linhaHtml).join('');
+      h += porAtividade[k].map(function(v){ return linhaHtml(v, false); }).join('');
       h += '</div>';
     });
   } else {
-    h += lista.map(linhaHtml).join('');
+    var porAluno = {};
+    lista.forEach(function(v){ var k = v.aluno_convite || 'Sem aluno informado'; (porAluno[k] = porAluno[k] || []).push(v); });
+    Object.keys(porAluno).sort().forEach(function(k){
+      h += '<div class="subcard"><div class="subcard-h">' + esc(k) + ' <span class="muted">(' + porAluno[k].length + ')</span></div>';
+      h += porAluno[k].map(function(v){ return linhaHtml(v, true); }).join('');
+      h += '</div>';
+    });
   }
   box.innerHTML = h;
 }
