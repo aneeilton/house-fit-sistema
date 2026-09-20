@@ -168,7 +168,7 @@
 
       <div class="card">
         <div id="card-agenda-mes"></div>
-        <div class="acoes" style="margin-top:10px"><button class="btn" id="btn-novo-paciente">+ Novo paciente</button><button class="btn-outline" id="btn-copiar-agenda">Copiar agenda</button><span class="msg" id="copiar-agenda-msg"></span></div>
+        <div class="acoes" style="margin-top:10px"><button class="btn" id="btn-novo-paciente">+ Novo paciente</button></div>
         <div id="form-novo-paciente" class="subform" hidden></div>
       </div>
 
@@ -426,7 +426,8 @@ function proximoAgendamento(pacId){
 }
 function repasseDoMes(nutri, ym){
   return PACIENTES.filter(function(p){ return p.nutricionista === nutri && p.ativo !== false && TIPOS_REPASSE.indexOf(p.tipo) > -1; })
-    .map(function(p){ return { p: p, ags: agendamentosDoMes(p.id, ym) }; });
+    .map(function(p){ return { p: p, ags: agendamentosDoMes(p.id, ym).filter(function(a){ return a.status === 'realizado'; }) }; })
+    .filter(function(x){ return x.ags.length > 0; });
 }
 
 /* ---------------- NUTRICIONISTA: render ---------------- */
@@ -435,13 +436,13 @@ function renderRepasse(){
   var nome = nutriSel === 'mario' ? 'Dr. Mário' : 'Dra. Tomázia';
   var lista = repasseDoMes(nutriSel, nutriMesSel);
   var h = '<h3>Repasse devido — ' + nome + '</h3>';
-  h += '<div class="cardsub">Pacientes marcados como Plano 1 / Consulta 1 — é quando a academia repassa ao nutricionista. Referência: agendamentos de ' + mesLabel(nutriMesSel) + '.</div>';
+  h += '<div class="cardsub">Pacientes Plano 1 / Consulta 1 com consulta já realizada em ' + mesLabel(nutriMesSel) + ' — é quando a academia repassa ao nutricionista.</div>';
   if (!lista.length){
-    h += '<div class="vazio">Nenhum paciente em Plano 1 / Consulta 1 no momento.</div>';
+    h += '<div class="vazio">Nenhum repasse devido neste mês ainda.</div>';
   } else {
     lista.forEach(function(x){
       h += '<div class="row"><span class="rowtxt"><b>' + esc(x.p.nome) + '</b> <span class="muted">· ' + tipoLabel(x.p.tipo) + '</span></span>'
-         + '<span class="tag ok">' + (x.ags.length ? x.ags.length + ' agend. no mês' : 'agendar') + '</span></div>';
+         + '<span class="tag ok">' + x.ags.length + ' realizada' + (x.ags.length > 1 ? 's' : '') + '</span></div>';
     });
   }
   box.innerHTML = h;
@@ -556,6 +557,8 @@ function renderAgendaMes(){
     }
     h += '</div>';
 
+    h += '<div class="acoes" style="margin:0 0 12px"><button class="btn-outline" id="btn-copiar-agenda">Copiar agenda</button><span class="msg" id="copiar-agenda-msg"></span></div>';
+
     h += '<div class="subcard"><div class="subcard-h">Sem agendamento <span class="muted">(' + semAgenda.length + ')</span></div>';
     if (!semAgenda.length){
       h += '<div class="vazio">Todo mundo já tem agendamento neste mês.</div>';
@@ -565,7 +568,7 @@ function renderAgendaMes(){
         h += '<div class="row"><span class="rowtxt">'
           + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Agendar">📅</button>'
           + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
-          + '<b>' + esc(p.nome) + '</b>' + (item.off ? ' <span class="tag off">não agendou</span>' : '') + '</span></div>';
+          + esc(p.nome) + '</span></div>';
         if (ex.agendar) h += '<div class="subform">' + formAgendarHtml(p, item.off, nutriMesSel) + '</div>';
         if (ex.editar) h += '<div class="subform">' + formEditarHtml(p) + '</div>';
       });
@@ -617,7 +620,7 @@ document.getElementById('seg-nutri').addEventListener('click', function(e){
   renderRepasse(); renderAgendaMes();
 });
 
-document.getElementById('btn-copiar-agenda').addEventListener('click', async function(){
+async function copiarAgenda(){
   var msgEl = document.getElementById('copiar-agenda-msg');
   var texto = textoAgendaMes();
   if (!texto){ if (msgEl) msgEl.textContent = 'Nenhum agendamento neste mês.'; return; }
@@ -628,7 +631,7 @@ document.getElementById('btn-copiar-agenda').addEventListener('click', async fun
     if (msgEl) msgEl.textContent = 'Não consegui copiar — tenta de novo.';
   }
   setTimeout(function(){ if (msgEl) msgEl.textContent = ''; }, 3000);
-});
+}
 
 document.getElementById('btn-novo-paciente').addEventListener('click', function(){
   var box = document.getElementById('form-novo-paciente');
@@ -659,6 +662,10 @@ async function onPacienteAreaClick(e){
   if (e.target && e.target.id === 'toggle-arquivados'){
     pacExpand.__arquivados = !pacExpand.__arquivados;
     renderAgendaMes();
+    return;
+  }
+  if (e.target && e.target.id === 'btn-copiar-agenda'){
+    copiarAgenda();
     return;
   }
   var t = e.target.closest ? e.target.closest('[data-toggle],[data-salvar-agenda],[data-del-agenda],[data-salvar-paciente],[data-arquivar-paciente],[data-nao-agendou]') : null;
@@ -742,6 +749,8 @@ document.getElementById('card-agenda-mes').addEventListener('change', async func
   await sb.from('nutri_agendamentos').update({ status: novoStatus }).eq('id', id);
   var a = AGEND.filter(function(x){ return x.id === id; })[0];
   if (a) a.status = novoStatus;
+  renderRepasse();
+  renderAgendaMes();
 });
 
 /* ---------------- VISITANTES: regras ---------------- */
