@@ -85,8 +85,10 @@
   .tag{font-size:11px;padding:3px 9px;border-radius:999px;background:var(--page);color:var(--text2);border:1px solid var(--grid);white-space:nowrap}
   .tag.ok{background:color-mix(in srgb, var(--good) 15%, transparent);color:var(--good);border-color:transparent}
   .tag.off{background:color-mix(in srgb, var(--bad) 15%, transparent);color:var(--bad);border-color:transparent}
+  .tag.warn{background:color-mix(in srgb, var(--warn) 15%, transparent);color:var(--warn);border-color:transparent}
 
   .icon-link{background:none;border:0;cursor:pointer;font-size:13px;padding:1px 3px;line-height:1;margin-right:1px;text-decoration:none;display:inline-block}
+  .sem-fechada{width:30px;text-align:center;color:var(--muted)}
 
   .mini{background:none;border:1px solid var(--border);color:var(--text2);font:inherit;font-size:11.5px;padding:5px 10px;border-radius:999px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
   .mini.danger{color:var(--bad);border-color:transparent}
@@ -156,6 +158,7 @@
     <nav class="maintabs">
       <button class="mtab active" data-area="nutri">Nutricionista</button>
       <button class="mtab" data-area="visit">Visitantes</button>
+      <button class="mtab" data-area="validade">Validade</button>
     </nav>
 
     <!-- ================= NUTRICIONISTA ================= -->
@@ -200,6 +203,11 @@
         <div class="cardsub" id="visit-resumo"></div>
         <div id="lista-visitantes"></div>
       </div>
+    </section>
+
+    <!-- ================= VALIDADE ================= -->
+    <section class="area" id="area-validade">
+      <div id="card-validade"></div>
     </section>
   </div>
 </div>
@@ -287,6 +295,18 @@ var PACIENTES = [], AGEND = [], VISIT = [];
 var nutriSel = 'mario', visitTipoSel = 'experimental';
 var nutriMesSel = hojeYM(), visitMesSel = hojeYM();
 var pacExpand = {};
+function semanaAtualDoMes(ym){
+  var hoje = todayISO();
+  if (hoje.slice(0,7) !== ym) return null;
+  return semanaDoMes(parseInt(hoje.slice(8,10), 10));
+}
+function semanasAbertasPadrao(ym){
+  var ref = semanaAtualDoMes(ym) || 1;
+  var abertas = {};
+  for (var s = 1; s <= 4; s++){ abertas[s] = (s === ref || s === ref + 1); }
+  return abertas;
+}
+var semanasAbertas = semanasAbertasPadrao(nutriMesSel);
 
 async function carregarNutri(){
   var r1 = await sb.from('nutri_pacientes').select('*').order('nome');
@@ -298,6 +318,119 @@ async function carregarVisit(){
   var r = await sb.from('visitantes').select('*').order('data', { ascending:false });
   VISIT = r.data || [];
 }
+
+/* ---------------- VALIDADE (espelha a aba "Validade" da Gestão) ---------------- */
+var PRODUTOS = [], LOTES = [];
+async function carregarValidade(){
+  var rp = await sb.from('produtos').select('*');
+  PRODUTOS = (rp.data || []).map(function(p){ return { id: p.id, nome: p.nome, diasConsumo: p.dias_consumo }; });
+  var rl = await sb.from('lotes').select('*').order('validade');
+  LOTES = (rl.data || []).map(function(l){ return { id: l.id, produtoId: l.produto_id, validade: l.validade, quantidade: l.quantidade, data: l.data }; });
+}
+function produtoDe(id){ return PRODUTOS.filter(function(p){ return p.id === id; })[0] || { nome: '(produto removido)', diasConsumo: 30 }; }
+function diasEntre(a, b){ return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000); }
+function maskDataBR(v){
+  v = (v || '').replace(/\D/g, '').slice(0, 8);
+  var out = v.slice(0, 2);
+  if (v.length > 2) out += '/' + v.slice(2, 4);
+  if (v.length > 4) out += '/' + v.slice(4, 8);
+  return out;
+}
+function parseDataBR(str){
+  var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str || '');
+  if (!m) return null;
+  var dd = +m[1], mm = +m[2], yyyy = +m[3];
+  if (mm < 1 || mm > 12) return null;
+  var fev = (yyyy % 4 === 0 && (yyyy % 100 !== 0 || yyyy % 400 === 0)) ? 29 : 28;
+  var diasMes = [31, fev, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (dd < 1 || dd > diasMes[mm - 1]) return null;
+  return yyyy + '-' + String(mm).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+}
+function lotesOrdenados(){
+  var hoje = todayISO();
+  return LOTES.map(function(lo){
+    var p = produtoDe(lo.produtoId);
+    var ate = diasEntre(hoje, lo.validade);
+    var vend = ate - (p.diasConsumo || 30);
+    return { lote: lo, prod: p, ate: ate, vend: vend };
+  }).sort(function(a, b){ return a.vend - b.vend; });
+}
+function renderValidade(){
+  var box = document.getElementById('card-validade');
+  if (!box) return;
+  var linhas = lotesOrdenados();
+  var agir = linhas.filter(function(l){ return l.vend <= 30 && l.vend > 0; }).length;
+  var fora = linhas.filter(function(l){ return l.vend <= 0; }).length;
+
+  var h = '<div class="card"><div class="cardhead"><h3>Validade — controle de estoque</h3>'
+    + '<span class="acoes"><span class="tag warn">' + agir + ' em alerta</span><span class="tag off">' + fora + ' fora de venda</span></span></div>'
+    + '<div class="cardsub">Espelhado da aba "Validade" da Gestão — o mesmo estoque, editável dos dois lados.</div></div>';
+
+  h += '<div class="card"><h3>Lançar compra</h3>';
+  h += '<div class="cardsub">Cada compra é um lote. O mesmo produto com validades diferentes entra em linhas separadas.</div>';
+  h += '<div class="field"><label>Produto</label><input class="inp" id="vl-nome" list="vl-lista" placeholder="Nome do produto"></div>';
+  h += '<datalist id="vl-lista">' + PRODUTOS.map(function(p){ return '<option value="' + escAttr(p.nome) + '">'; }).join('') + '</datalist>';
+  h += '<div class="field"><label>Quantidade</label><input class="inp" id="vl-qtd" type="text" inputmode="numeric" pattern="[0-9]*" value="1" style="max-width:80px"></div>';
+  h += '<div class="field"><label>Validade</label><input class="inp" id="vl-validade" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" style="max-width:140px"></div>';
+  h += '<div class="acoes"><button class="btn" id="vl-add">Lançar lote</button><span class="msg" id="vl-msg"></span></div>';
+  h += '<div class="cardsub">Suplemento consumido em 30 dias: um pote que vence em 40 dias tem só 10 dias de venda.</div>';
+  h += '</div>';
+
+  h += '<div class="card"><h3>Estoque por urgência</h3>';
+  if (!linhas.length){
+    h += '<div class="vazio">Nenhum lote lançado ainda.</div>';
+  } else {
+    linhas.forEach(function(l){
+      var cls = 'tag', txt;
+      if (l.vend <= 0){ cls += ' off'; txt = 'fora de venda'; }
+      else if (l.vend <= 30){ cls += ' warn'; txt = l.vend + ' dias p/ vender'; }
+      else { cls += ' ok'; txt = l.vend + ' dias p/ vender'; }
+      h += '<div class="row"><span class="rowtxt"><b>' + esc(l.prod.nome) + '</b> · ' + (l.lote.quantidade || 1) + ' un'
+         + '<br><span class="muted">vence em ' + fmtDataBR(l.lote.validade) + ' · ' + l.ate + ' dias</span></span>'
+         + '<span class="acoes"><span class="' + cls + '">' + txt + '</span><button class="mini" data-baixa="' + l.lote.id + '">dar baixa</button></span></div>';
+    });
+  }
+  h += '</div>';
+  box.innerHTML = h;
+}
+document.getElementById('card-validade').addEventListener('click', async function(e){
+  var t = e.target;
+  if (t.id === 'vl-add'){
+    var nome = (document.getElementById('vl-nome').value || '').trim();
+    var qtd = parseInt(document.getElementById('vl-qtd').value, 10) || 1;
+    var val = parseDataBR(document.getElementById('vl-validade').value);
+    var msgEl = document.getElementById('vl-msg');
+    if (!nome){ msgEl.textContent = 'Falta o nome do produto.'; return; }
+    if (!val){ msgEl.textContent = 'Data inválida — use o formato DD/MM/AAAA.'; return; }
+    msgEl.textContent = '';
+    t.disabled = true;
+    var p = PRODUTOS.filter(function(x){ return x.nome.toLowerCase() === nome.toLowerCase(); })[0];
+    if (!p){
+      var resP = await sb.from('produtos').insert({ id: uid(), nome: nome, dias_consumo: 30 }).select().single();
+      if (resP.error){ msgEl.textContent = 'Não consegui salvar o produto — tenta de novo.'; t.disabled = false; return; }
+      p = { id: resP.data.id, nome: resP.data.nome, diasConsumo: resP.data.dias_consumo };
+      PRODUTOS.push(p);
+    }
+    var novoLote = { id: uid(), produto_id: p.id, validade: val, quantidade: qtd, data: todayISO() };
+    var resL = await sb.from('lotes').insert(novoLote).select().single();
+    t.disabled = false;
+    if (resL.error){ msgEl.textContent = 'Não consegui salvar o lote — tenta de novo.'; return; }
+    LOTES.push({ id: resL.data.id, produtoId: resL.data.produto_id, validade: resL.data.validade, quantidade: resL.data.quantidade, data: resL.data.data });
+    renderValidade();
+    return;
+  }
+  var b = t.getAttribute && t.getAttribute('data-baixa');
+  if (b){
+    if (!confirm('Dar baixa nesse lote?')) return;
+    await sb.from('lotes').delete().eq('id', b);
+    LOTES = LOTES.filter(function(l){ return l.id !== b; });
+    renderValidade();
+  }
+});
+document.getElementById('card-validade').addEventListener('input', function(e){
+  if (e.target && e.target.id === 'vl-validade') e.target.value = maskDataBR(e.target.value);
+  else if (e.target && e.target.id === 'vl-qtd') e.target.value = e.target.value.replace(/\D/g, '');
+});
 
 /* ---------------- NUTRICIONISTA: agendamentos e repasse ---------------- */
 function agendamentosDoMes(pacId, ym){
@@ -380,7 +513,12 @@ function renderAgendaMes(){
   if (!pacientesNutri.length){
     h += '<div class="vazio">Nenhum paciente ativo cadastrado ainda.</div>';
   } else {
-    h += '<div class="mesx"><table class="mestbl"><thead><tr><th>Paciente</th><th>Semana 1</th><th>Semana 2</th><th>Semana 3</th><th>Semana 4</th></tr></thead><tbody>';
+    h += '<div class="mesx"><table class="mestbl"><thead><tr><th>Paciente</th>';
+    for (var sH = 1; sH <= 4; sH++){
+      var abertaH = !!semanasAbertas[sH];
+      h += '<th class="' + (abertaH ? '' : 'sem-fechada') + '"><button class="icon-link" data-toggle-semana="' + sH + '" title="' + (abertaH ? 'Ocultar semana' : 'Abrir semana') + '">' + (abertaH ? '▾' : '▸') + '</button> Semana ' + sH + '</th>';
+    }
+    h += '</tr></thead><tbody>';
     pacientesNutri.forEach(function(item){
       var p = item.p, naoAgendou = item.off;
       var ex = pacExpand[p.id] || {};
@@ -394,6 +532,11 @@ function renderAgendaMes(){
          + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
          + esc(p.nome) + (naoAgendou ? ' <span class="tag off">não agendou</span>' : '') + '</td>';
       for (var s = 1; s <= 4; s++){
+        var aberta = !!semanasAbertas[s];
+        if (!aberta){
+          h += '<td class="sem-fechada">' + (porSemana[s].length ? '<span class="muted">●</span>' : '') + '</td>';
+          continue;
+        }
         var cel = porSemana[s]
           .sort(function(a,b){ return (a.hora||'').localeCompare(b.hora||''); })
           .map(function(a){
@@ -496,6 +639,13 @@ document.getElementById('btn-novo-paciente').addEventListener('click', function(
 async function onPacienteAreaClick(e){
   if (e.target && e.target.id === 'toggle-arquivados'){
     pacExpand.__arquivados = !pacExpand.__arquivados;
+    renderAgendaMes();
+    return;
+  }
+  var tSem = e.target.closest ? e.target.closest('[data-toggle-semana]') : null;
+  if (tSem){
+    var sNum = tSem.getAttribute('data-toggle-semana');
+    semanasAbertas[sNum] = !semanasAbertas[sNum];
     renderAgendaMes();
     return;
   }
@@ -768,8 +918,8 @@ document.querySelectorAll('.mtab').forEach(function(b){
 async function bootApp(){
   document.getElementById('tela-login').style.display = 'none';
   document.getElementById('app').style.display = '';
-  await Promise.all([carregarNutri(), carregarVisit()]);
-  renderRepasse(); renderAgendaMes(); renderVisitantes();
+  await Promise.all([carregarNutri(), carregarVisit(), carregarValidade()]);
+  renderRepasse(); renderAgendaMes(); renderVisitantes(); renderValidade();
 }
 function mostrarLogin(msg){
   document.getElementById('app').style.display = 'none';
@@ -794,7 +944,7 @@ document.getElementById('btn-sair').addEventListener('click', async function(){
 });
 
 (async function init(){
-  popularMeses(document.getElementById('nutri-mes'), nutriMesSel, function(v){ nutriMesSel = v; renderRepasse(); renderAgendaMes(); });
+  popularMeses(document.getElementById('nutri-mes'), nutriMesSel, function(v){ nutriMesSel = v; semanasAbertas = semanasAbertasPadrao(nutriMesSel); renderRepasse(); renderAgendaMes(); });
   popularMeses(document.getElementById('visit-mes'), visitMesSel, function(v){ visitMesSel = v; renderVisitantes(); });
   try{
     var s = await sb.auth.getSession();
