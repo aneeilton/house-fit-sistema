@@ -4808,6 +4808,19 @@ window.initEscala = async function initEscala(){
   var mesSel = window.mesGlobal || (new Date().toISOString().slice(0,7));
   var dadosMes = null;
 
+  // Mês atual - 1 até +6 (pra montar a escala de meses futuros com antecedência).
+  function mesesEscalaDisponiveis(){
+    var hoje = new Date();
+    var lista = [];
+    for (var i = -1; i <= 6; i++){
+      var d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+      lista.push(d.getFullYear() + '-' + pad2(d.getMonth()+1));
+    }
+    if (lista.indexOf(mesSel) === -1) lista.push(mesSel);
+    lista.sort();
+    return lista;
+  }
+
   function sugestaoFeriados(ym){
     var ano = parseInt(ym.split('-')[0],10);
     var todos = feriadosNacionaisDoAno(ano).concat(feriadosNacionaisDoAno(ano+1)).concat(feriadosNacionaisDoAno(ano-1));
@@ -4856,7 +4869,15 @@ window.initEscala = async function initEscala(){
   function render(){
     var h = '';
     h += '<div class="mod-bar"><span id="msg-escala" class="mod-msg"></span></div>';
-    h += '<div class="cardsub" style="margin:0 0 10px">Mês em uso: ' + mesLabel(mesSel) + ' — troque no seletor do topo da página.</div>';
+    h += '<div class="mod-linha" style="margin:0 0 10px;align-items:center">';
+    h += '<label class="mod-msg" style="margin-right:2px">Mês da escala</label>';
+    h += '<select class="mod-campo" id="esc-mes-sel" style="max-width:160px">';
+    mesesEscalaDisponiveis().forEach(function(ym){
+      h += '<option value="' + ym + '"' + (ym === mesSel ? ' selected' : '') + '>' + esc(mesLabel(ym)) + '</option>';
+    });
+    h += '</select>';
+    h += '<span class="mod-msg">Monte a escala de meses futuros com antecedência.</span>';
+    h += '</div>';
     if (!dadosMes.salvo){
       h += '<div class="mod-aviso alerta">Essa é uma sugestão automática, ainda não salva. Confira e toque em "Salvar escala do mês".</div>';
     }
@@ -4912,6 +4933,13 @@ window.initEscala = async function initEscala(){
     h += '<div class="mod-linha" style="margin:14px 0 30px"><button class="btn-dash" id="esc-salvar">Salvar escala do mês</button></div>';
 
     box.innerHTML = h;
+
+    var selMes = document.getElementById('esc-mes-sel');
+    if (selMes) selMes.addEventListener('change', async function(){
+      mesSel = selMes.value;
+      dadosMes = await carregarMes(mesSel);
+      render();
+    });
 
     box.querySelectorAll('[data-fer-horario]').forEach(function(el){
       el.addEventListener('change', function(){ dadosMes.feriados[+el.dataset.ferHorario].horario = el.value; });
