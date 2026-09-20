@@ -707,6 +707,7 @@
         <div class="cardsub">Réplica da aba "Contas a pagar", por grupo e item — Realizado alimentado pelas despesas lançadas em Lançamento</div>
         <div class="scroll-table"><table class="datatable" id="tabela-contaspagar"></table></div>
       </div>
+      <div class="card" id="card-repasse-nutri"></div>
     </div>
 
     <!-- CONCILIACAO -->
@@ -1707,6 +1708,47 @@ window.renderContasPagar = function renderContasPagar() {
   }
 };
 renderContasPagar();
+
+// Espelha da página de recepção (recepcao.html): pacientes de nutrição marcados
+// como Plano 1 / Consulta 1 — ciclo em que a academia deve repasse ao nutricionista.
+// Somente leitura aqui; o cadastro/edição continua feito na recepção.
+window.renderRepasseNutri = async function renderRepasseNutri(){
+  var box = document.getElementById('card-repasse-nutri');
+  if (!box || !window.sb) return;
+  var ym = window.mesGlobal || todayISOTop().slice(0,7);
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  try{
+    var rPac = await sb.from('nutri_pacientes').select('id, nutricionista, nome, tipo, ativo');
+    var rAg = await sb.from('nutri_agendamentos').select('paciente_id, data, status');
+    var pacientes = (rPac.data || []).filter(function(p){ return p.ativo !== false && (p.tipo === 'plano1' || p.tipo === 'consulta1'); });
+    var agendadosSet = {};
+    (rAg.data || []).forEach(function(a){
+      if (a.status === 'cancelado' || a.status === 'recusou') return;
+      if (String(a.data).slice(0,7) !== ym) return;
+      agendadosSet[a.paciente_id] = true;
+    });
+    function blocoNutri(nutri, label){
+      var lista = pacientes.filter(function(p){ return p.nutricionista === nutri; });
+      var h = '<div class="ger-mod"><div class="ger-mod-nome">' + label + ' — ' + lista.length + ' pacientes em Plano 1 / Consulta 1</div>';
+      if (!lista.length){
+        h += '<div class="cardsub">Nenhum paciente nesse ciclo no momento.</div>';
+      } else {
+        lista.forEach(function(p){
+          var ok = !!agendadosSet[p.id];
+          h += '<div class="mod-item"><span class="txt">' + esc(p.nome) + '</span><span class="mod-tag' + (ok ? ' ok' : '') + '">' + (ok ? 'agendado' : 'sem agendamento') + '</span></div>';
+        });
+      }
+      h += '</div>';
+      return h;
+    }
+    var h = '<h3>Repasse devido — Nutricionistas</h3>';
+    h += '<div class="cardsub">Espelhado da página de recepção — referência: ' + mesLabelTop(ym) + '. Cadastro e agenda continuam sendo feitos por lá.</div>';
+    h += blocoNutri('mario', 'Dr. Mário');
+    h += blocoNutri('tomazia', 'Dra. Tomázia');
+    box.innerHTML = h;
+  }catch(e){ box.innerHTML = '<h3>Repasse devido — Nutricionistas</h3><div class="cardsub">Não consegui carregar os dados da recepção agora.</div>'; }
+};
+window.renderRepasseNutri();
 
 // ================= CONCILIACAO =================
 // ================= CONCILIACAO (tabela dia a dia) =================
@@ -3882,6 +3924,7 @@ window.initMenu = function initMenu(){
       if (window.renderDiaria) window.renderDiaria();
       if (window.carregarStatusContasPagar) await window.carregarStatusContasPagar(window.mesGlobal);
       if (window.renderContasPagar) window.renderContasPagar();
+      if (window.renderRepasseNutri) window.renderRepasseNutri();
       if (window.renderConciliacaoDias) window.renderConciliacaoDias();
       if (window.renderAnual) window.renderAnual();
       if (window.setMesGerencial) await window.setMesGerencial(window.mesGlobal);
@@ -3897,6 +3940,7 @@ window.initMenu = function initMenu(){
       await window.initSaldoOnline();
       if (window.renderDiaria) window.renderDiaria();
       if (window.renderContasPagar) window.renderContasPagar();
+      if (window.renderRepasseNutri) window.renderRepasseNutri();
       if (window.renderConciliacaoDias) window.renderConciliacaoDias();
       if (window.renderAnual) window.renderAnual();
       if (window.renderConciliacaoHistorico) window.renderConciliacaoHistorico();
@@ -4228,6 +4272,34 @@ window.initGerencial = async function initGerencial(){
   }
   var mesSel = window.mesGlobal || mesAtual();
   var dados = null;
+  var recepcaoResumo = null;
+
+  // Espelha da página de recepção (recepcao.html): visitantes do mês e
+  // status de repasse devido aos nutricionistas. Somente leitura aqui.
+  async function carregarResumoRecepcao(ym){
+    try{
+      var rVis = await sb.from('visitantes').select('tipo, data, virou_aluno');
+      var rPac = await sb.from('nutri_pacientes').select('id, nutricionista, tipo, ativo');
+      var rAg = await sb.from('nutri_agendamentos').select('paciente_id, data, status');
+      var vis = (rVis.data || []).filter(function(v){ return String(v.data).slice(0,7) === ym; });
+      var experimental = vis.filter(function(v){ return v.tipo === 'experimental'; }).length;
+      var convidado = vis.filter(function(v){ return v.tipo === 'convidado'; }).length;
+      var viraramAluno = vis.filter(function(v){ return v.virou_aluno; }).length;
+      var pacientes = (rPac.data || []).filter(function(p){ return p.ativo !== false && (p.tipo === 'plano1' || p.tipo === 'consulta1'); });
+      var agendadosSet = {};
+      (rAg.data || []).forEach(function(a){
+        if (a.status === 'cancelado' || a.status === 'recusou') return;
+        if (String(a.data).slice(0,7) !== ym) return;
+        agendadosSet[a.paciente_id] = true;
+      });
+      function repasseNutri(nutri){
+        var lista = pacientes.filter(function(p){ return p.nutricionista === nutri; });
+        var agendados = lista.filter(function(p){ return agendadosSet[p.id]; }).length;
+        return { total: lista.length, agendados: agendados };
+      }
+      return { experimental: experimental, convidado: convidado, viraramAluno: viraramAluno, mario: repasseNutri('mario'), tomazia: repasseNutri('tomazia') };
+    }catch(e){ return null; }
+  }
 
   var CAMPOS_NUM = [
     'quantidade_produtos','crediario','cartao','dinheiro_pix','custo_venda','quebra_doacao',
@@ -4317,6 +4389,19 @@ window.initGerencial = async function initGerencial(){
 
     h += '<div class="mod-bar"><span id="msg-gerencial" class="mod-msg"></span></div>';
     h += '<div class="cardsub" style="margin:0 0 10px">Mês em uso: ' + mesLabel(mesSel) + ' — troque no seletor do topo da página.</div>';
+
+    if (recepcaoResumo){
+      h += '<div class="card"><h3>Recepção — Nutrição e Visitantes</h3>';
+      h += '<div class="cardsub">Espelhado da página de recepção — cadastro continua sendo feito por lá.</div>';
+      h += '<div class="ger-grid2">';
+      h += '<div class="mod-item"><span class="txt">Aula experimental</span><span class="mod-tag">' + recepcaoResumo.experimental + '</span></div>';
+      h += '<div class="mod-item"><span class="txt">Convidados</span><span class="mod-tag">' + recepcaoResumo.convidado + '</span></div>';
+      h += '</div>';
+      h += '<div class="mod-item"><span class="txt">Viraram aluno</span><span class="mod-tag ok">' + recepcaoResumo.viraramAluno + '</span></div>';
+      h += '<div class="mod-item"><span class="txt">Repasse devido — Dr. Mário</span><span class="mod-tag">' + recepcaoResumo.mario.agendados + ' de ' + recepcaoResumo.mario.total + ' agendados</span></div>';
+      h += '<div class="mod-item"><span class="txt">Repasse devido — Dra. Tomázia</span><span class="mod-tag">' + recepcaoResumo.tomazia.agendados + ' de ' + recepcaoResumo.tomazia.total + ' agendados</span></div>';
+      h += '</div>';
+    }
 
     h += '<div class="card"><h3>Suplementos — vendas do mês</h3>';
     h += '<div class="ger-grid2">';
@@ -4513,9 +4598,10 @@ window.initGerencial = async function initGerencial(){
     }catch(e){ return false; }
   }
   window.atualizarResumoGerencialTodos = atualizarResumoGerencialTodos;
-  window.setMesGerencial = async function(ym){ mesSel = ym; dados = await carregarMes(mesSel); render(); };
+  window.setMesGerencial = async function(ym){ mesSel = ym; dados = await carregarMes(mesSel); recepcaoResumo = await carregarResumoRecepcao(mesSel); render(); };
 
   dados = await carregarMes(mesSel);
+  recepcaoResumo = await carregarResumoRecepcao(mesSel);
   render();
 
   await atualizarResumoGerencialTodos();
