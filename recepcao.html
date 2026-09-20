@@ -476,6 +476,7 @@ function formEditarHtml(p){
 }
 
 /* ---------------- NUTRICIONISTA: agenda visual do mês ---------------- */
+function semanaDoMes(dia){ return Math.min(4, Math.ceil(dia / 7)); }
 function renderAgendaMes(){
   var box = document.getElementById('card-agenda-mes');
   var nutriNomeFull = nutriSel === 'mario' ? 'Dr. Mário' : 'Dra. Tomázia';
@@ -490,41 +491,63 @@ function renderAgendaMes(){
     h += '<div class="vazio">Nenhum paciente ativo cadastrado ainda.</div>';
   } else {
     // Assim que o paciente tem um agendamento no mês, ele sobe pro card "Agendado";
-    // os demais ficam em "Sem agendamento" — sem precisar mostrar semana por semana.
-    var agendados = [], semAgenda = [];
+    // os demais ficam em "Sem agendamento".
+    var agendadosPorPac = {}, semAgenda = [];
     pacientesNutri.forEach(function(item){
-      var ags = agsDoMes.filter(function(a){ return a.paciente_id === item.p.id; })
-        .sort(function(a,b){ return (a.data + (a.hora || '')).localeCompare(b.data + (b.hora || '')); });
-      (ags.length ? agendados : semAgenda).push({ p: item.p, off: item.off, ags: ags });
+      var ags = agsDoMes.filter(function(a){ return a.paciente_id === item.p.id; });
+      if (ags.length) agendadosPorPac[item.p.id] = { p: item.p, off: item.off, total: ags.length };
+      else semAgenda.push(item);
     });
-    agendados.sort(function(a,b){ return a.ags[0].data.localeCompare(b.ags[0].data) || a.p.nome.localeCompare(b.p.nome); });
     semAgenda.sort(function(a,b){ return (a.off === b.off) ? a.p.nome.localeCompare(b.p.nome) : (a.off ? 1 : -1); });
 
-    var linhaPaciente = function(item){
-      var p = item.p, ex = pacExpand[p.id] || {};
-      var lh = '<div class="row"><span class="rowtxt">'
-        + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Agendar">📅</button>'
-        + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
-        + '<b>' + esc(p.nome) + '</b>' + (item.off ? ' <span class="tag off">não agendou</span>' : '');
-      if (item.ags.length){
-        lh += '<br>' + item.ags.map(function(a){
-          var texto = fmtDataBR(a.data).slice(0,5) + (a.hora ? ' - ' + String(a.hora).slice(0,5) : '');
-          var wa = p.telefone ? waLink(p.telefone, msgConfirmacaoNutri(p, a, nutriNomeFull)) : null;
-          return '<span class="tag ok">' + texto + (wa ? ' <a class="icon-link wa" href="' + wa + '" target="_blank" rel="noopener" title="Confirmar WhatsApp">💬</a>' : '') + '</span>';
-        }).join(' ');
-      }
-      lh += '</span></div>';
-      if (ex.agendar) lh += '<div class="subform">' + formAgendarHtml(p, item.off, nutriMesSel) + '</div>';
-      if (ex.editar) lh += '<div class="subform">' + formEditarHtml(p) + '</div>';
-      return lh;
-    };
+    // Card "Agendado": uma linha por agendamento (não por paciente), agrupada por
+    // semana do mês, e ordenada por data, depois hora, depois nome do paciente.
+    var ocorrencias = agsDoMes.map(function(a){
+      var info = agendadosPorPac[a.paciente_id];
+      return { a: a, p: info.p, off: info.off, total: info.total, semana: semanaDoMes(parseInt(String(a.data).slice(8,10), 10)) };
+    }).sort(function(x,y){
+      return x.a.data.localeCompare(y.a.data) || (x.a.hora || '').localeCompare(y.a.hora || '') || x.p.nome.localeCompare(y.p.nome);
+    });
 
-    h += '<div class="subcard"><div class="subcard-h">Agendado <span class="muted">(' + agendados.length + ')</span></div>';
-    h += agendados.length ? agendados.map(linhaPaciente).join('') : '<div class="vazio">Nenhum paciente agendado ainda neste mês.</div>';
+    h += '<div class="subcard"><div class="subcard-h">Agendado <span class="muted">(' + Object.keys(agendadosPorPac).length + ')</span></div>';
+    if (!ocorrencias.length){
+      h += '<div class="vazio">Nenhum paciente agendado ainda neste mês.</div>';
+    } else {
+      var vistos = {}, semanaAtualRender = null;
+      ocorrencias.forEach(function(o){
+        if (o.semana !== semanaAtualRender){ semanaAtualRender = o.semana; h += '<div class="rowsub">Semana ' + o.semana + '</div>'; }
+        var p = o.p, a = o.a;
+        vistos[p.id] = (vistos[p.id] || 0) + 1;
+        var texto = fmtDataBR(a.data).slice(0,5) + (a.hora ? ' - ' + String(a.hora).slice(0,5) : '');
+        var wa = p.telefone ? waLink(p.telefone, msgConfirmacaoNutri(p, a, nutriNomeFull)) : null;
+        h += '<div class="row"><span class="rowtxt">'
+          + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Agendar">📅</button>'
+          + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
+          + '<b>' + esc(p.nome) + '</b> <span class="tag ok">' + texto + (wa ? ' <a class="icon-link wa" href="' + wa + '" target="_blank" rel="noopener" title="Confirmar WhatsApp">💬</a>' : '') + '</span>'
+          + '</span></div>';
+        if (vistos[p.id] === o.total){
+          var ex = pacExpand[p.id] || {};
+          if (ex.agendar) h += '<div class="subform">' + formAgendarHtml(p, o.off, nutriMesSel) + '</div>';
+          if (ex.editar) h += '<div class="subform">' + formEditarHtml(p) + '</div>';
+        }
+      });
+    }
     h += '</div>';
 
     h += '<div class="subcard"><div class="subcard-h">Sem agendamento <span class="muted">(' + semAgenda.length + ')</span></div>';
-    h += semAgenda.length ? semAgenda.map(linhaPaciente).join('') : '<div class="vazio">Todo mundo já tem agendamento neste mês.</div>';
+    if (!semAgenda.length){
+      h += '<div class="vazio">Todo mundo já tem agendamento neste mês.</div>';
+    } else {
+      semAgenda.forEach(function(item){
+        var p = item.p, ex = pacExpand[p.id] || {};
+        h += '<div class="row"><span class="rowtxt">'
+          + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Agendar">📅</button>'
+          + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
+          + '<b>' + esc(p.nome) + '</b>' + (item.off ? ' <span class="tag off">não agendou</span>' : '') + '</span></div>';
+        if (ex.agendar) h += '<div class="subform">' + formAgendarHtml(p, item.off, nutriMesSel) + '</div>';
+        if (ex.editar) h += '<div class="subform">' + formEditarHtml(p) + '</div>';
+      });
+    }
     h += '</div>';
   }
 
