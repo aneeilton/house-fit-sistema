@@ -76,6 +76,11 @@
   .pac-bloco{border-top:1px solid var(--grid);padding:10px 0}
   .pac-bloco:first-of-type{border-top:0}
   .pac-bloco.inativo{opacity:.5}
+
+  .dias-linha{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}
+  .dia-bloco{background:var(--surface);border:1px solid var(--grid);border-radius:10px;padding:8px 10px;min-width:150px}
+  .dia-bloco-h{font-weight:700;font-size:12.5px;margin-bottom:6px}
+  .dia-linha{font-size:12.5px;line-height:1.9;white-space:nowrap}
   .row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:4px 0;flex-wrap:wrap}
   .rowtxt{font-size:13.5px;line-height:1.45}
   .rowsub{font-size:12px;color:var(--text2);margin:2px 0 4px}
@@ -476,7 +481,14 @@ function formEditarHtml(p){
 }
 
 /* ---------------- NUTRICIONISTA: agenda visual do mês ---------------- */
-function semanaDoMes(dia){ return Math.min(4, Math.ceil(dia / 7)); }
+var PARTICULAS_NOME = ['de', 'da', 'do', 'dos', 'das'];
+// Nome + primeiro sobrenome, cortando sobrenomes extras — pra caber no bloco do dia.
+function nomeCurto(nomeCompleto){
+  var partes = String(nomeCompleto || '').trim().split(/\s+/);
+  if (partes.length <= 2) return partes.join(' ');
+  var fim = (PARTICULAS_NOME.indexOf(partes[1].toLowerCase()) > -1) ? 3 : 2;
+  return partes.slice(0, fim).join(' ');
+}
 function renderAgendaMes(){
   var box = document.getElementById('card-agenda-mes');
   var nutriNomeFull = nutriSel === 'mario' ? 'Dr. Mário' : 'Dra. Tomázia';
@@ -501,10 +513,10 @@ function renderAgendaMes(){
     semAgenda.sort(function(a,b){ return (a.off === b.off) ? a.p.nome.localeCompare(b.p.nome) : (a.off ? 1 : -1); });
 
     // Card "Agendado": uma linha por agendamento (não por paciente), agrupada por
-    // semana do mês, e ordenada por data, depois hora, depois nome do paciente.
+    // dia exato — um bloco por dia, lado a lado — e ordenada por data, hora e nome.
     var ocorrencias = agsDoMes.filter(function(a){ return !!agendadosPorPac[a.paciente_id]; }).map(function(a){
       var info = agendadosPorPac[a.paciente_id];
-      return { a: a, p: info.p, off: info.off, total: info.total, semana: semanaDoMes(parseInt(String(a.data).slice(8,10), 10)) };
+      return { a: a, p: info.p, off: info.off, total: info.total };
     }).sort(function(x,y){
       return x.a.data.localeCompare(y.a.data) || (x.a.hora || '').localeCompare(y.a.hora || '') || x.p.nome.localeCompare(y.p.nome);
     });
@@ -513,24 +525,34 @@ function renderAgendaMes(){
     if (!ocorrencias.length){
       h += '<div class="vazio">Nenhum paciente agendado ainda neste mês.</div>';
     } else {
-      var vistos = {}, semanaAtualRender = null;
+      var vistos = {}, porDia = {}, ordemDias = [];
       ocorrencias.forEach(function(o){
-        if (o.semana !== semanaAtualRender){ semanaAtualRender = o.semana; h += '<div class="rowsub">Semana ' + o.semana + '</div>'; }
-        var p = o.p, a = o.a;
-        vistos[p.id] = (vistos[p.id] || 0) + 1;
-        var texto = fmtDataBR(a.data).slice(0,5) + (a.hora ? ' - ' + String(a.hora).slice(0,5) : '');
-        var wa = p.telefone ? waLink(p.telefone, msgConfirmacaoNutri(p, a, nutriNomeFull)) : null;
-        h += '<div class="row"><span class="rowtxt">'
-          + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Agendar">📅</button>'
-          + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
-          + '<b>' + esc(p.nome) + '</b> <span class="tag ok">' + texto + (wa ? ' <a class="icon-link wa" href="' + wa + '" target="_blank" rel="noopener" title="Confirmar WhatsApp">💬</a>' : '') + '</span>'
-          + '</span></div>';
-        if (vistos[p.id] === o.total){
-          var ex = pacExpand[p.id] || {};
-          if (ex.agendar) h += '<div class="subform">' + formAgendarHtml(p, o.off, nutriMesSel) + '</div>';
-          if (ex.editar) h += '<div class="subform">' + formEditarHtml(p) + '</div>';
-        }
+        if (!porDia[o.a.data]){ porDia[o.a.data] = []; ordemDias.push(o.a.data); }
+        porDia[o.a.data].push(o);
       });
+      h += '<div class="dias-linha">';
+      ordemDias.forEach(function(dia){
+        h += '<div class="dia-bloco"><div class="dia-bloco-h">Dia ' + fmtDataBR(dia).slice(0,5) + '</div>';
+        porDia[dia].forEach(function(o){
+          var p = o.p, a = o.a;
+          vistos[p.id] = (vistos[p.id] || 0) + 1;
+          var horaTxt = a.hora ? String(a.hora).slice(0,5) : '--:--';
+          var wa = p.telefone ? waLink(p.telefone, msgConfirmacaoNutri(p, a, nutriNomeFull)) : null;
+          h += '<div class="dia-linha">'
+            + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Agendar">📅</button>'
+            + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
+            + '<b>' + horaTxt + '</b> - ' + esc(nomeCurto(p.nome))
+            + (wa ? ' <a class="icon-link wa" href="' + wa + '" target="_blank" rel="noopener" title="Confirmar WhatsApp">💬</a>' : '')
+            + '</div>';
+          if (vistos[p.id] === o.total){
+            var ex = pacExpand[p.id] || {};
+            if (ex.agendar) h += '<div class="subform">' + formAgendarHtml(p, o.off, nutriMesSel) + '</div>';
+            if (ex.editar) h += '<div class="subform">' + formEditarHtml(p) + '</div>';
+          }
+        });
+        h += '</div>';
+      });
+      h += '</div>';
     }
     h += '</div>';
 
