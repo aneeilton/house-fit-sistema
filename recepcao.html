@@ -502,7 +502,7 @@ function renderAgendaMes(){
 
     // Card "Agendado": uma linha por agendamento (não por paciente), agrupada por
     // semana do mês, e ordenada por data, depois hora, depois nome do paciente.
-    var ocorrencias = agsDoMes.map(function(a){
+    var ocorrencias = agsDoMes.filter(function(a){ return !!agendadosPorPac[a.paciente_id]; }).map(function(a){
       var info = agendadosPorPac[a.paciente_id];
       return { a: a, p: info.p, off: info.off, total: info.total, semana: semanaDoMes(parseInt(String(a.data).slice(8,10), 10)) };
     }).sort(function(x,y){
