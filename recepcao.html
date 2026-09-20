@@ -88,7 +88,7 @@
   .tag.warn{background:color-mix(in srgb, var(--warn) 15%, transparent);color:var(--warn);border-color:transparent}
 
   .icon-link{background:none;border:0;cursor:pointer;font-size:13px;padding:1px 3px;line-height:1;margin-right:1px;text-decoration:none;display:inline-block}
-  .sem-fechada{width:1%;text-align:center;color:var(--muted);padding-left:4px;padding-right:4px}
+  .sem-fechada{text-align:center;color:var(--muted);padding-left:2px;padding-right:2px}
   .sem-fechada .icon-link{padding:1px 2px;font-size:11px}
 
   .mini{background:none;border:1px solid var(--border);color:var(--text2);font:inherit;font-size:11.5px;padding:5px 10px;border-radius:999px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
@@ -119,11 +119,11 @@
   .vazio{font-size:13px;color:var(--muted);padding:10px 0}
 
   .mesx{overflow-x:auto;margin-top:8px}
-  .mestbl{width:100%;border-collapse:collapse;font-size:11.5px;min-width:520px}
-  .mestbl th,.mestbl td{padding:6px 8px;border-bottom:1px solid var(--grid);text-align:left;white-space:nowrap}
-  .mestbl th{color:var(--text2);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em}
-  .mestbl td:first-child,.mestbl th:first-child{white-space:normal;min-width:130px}
-  .mestbl td{color:var(--text2)}
+  .mestbl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11.5px;min-width:560px}
+  .mestbl th,.mestbl td{padding:8px;border-bottom:1px solid var(--grid);text-align:left;vertical-align:top}
+  .mestbl th{color:var(--text2);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;vertical-align:middle}
+  .mestbl td:first-child,.mestbl th:first-child{white-space:normal;text-align:left}
+  .mestbl td{color:var(--text2);white-space:normal;line-height:1.6}
   .mestbl td:first-child{color:var(--text)}
   .mes-expand td{white-space:normal;background:var(--page);padding:10px 12px;border-radius:10px}
 
@@ -514,7 +514,15 @@ function renderAgendaMes(){
   if (!pacientesNutri.length){
     h += '<div class="vazio">Nenhum paciente ativo cadastrado ainda.</div>';
   } else {
-    h += '<div class="mesx"><table class="mestbl"><thead><tr><th>Paciente</th>';
+    var qtdAbertas = 0;
+    for (var sC = 1; sC <= 4; sC++){ if (semanasAbertas[sC]) qtdAbertas++; }
+    var larguraPaciente = 30, larguraFechada = 6;
+    var larguraAberta = qtdAbertas ? (100 - larguraPaciente - larguraFechada * (4 - qtdAbertas)) / qtdAbertas : 0;
+    h += '<div class="mesx"><table class="mestbl"><colgroup><col style="width:' + larguraPaciente + '%">';
+    for (var sG = 1; sG <= 4; sG++){
+      h += '<col style="width:' + (semanasAbertas[sG] ? larguraAberta : larguraFechada) + '%">';
+    }
+    h += '</colgroup><thead><tr><th>Paciente</th>';
     for (var sH = 1; sH <= 4; sH++){
       var abertaH = !!semanasAbertas[sH];
       h += '<th class="' + (abertaH ? '' : 'sem-fechada') + '"><button class="icon-link" data-toggle-semana="' + sH + '" title="' + (abertaH ? 'Ocultar semana ' + sH : 'Abrir semana ' + sH) + '">' + (abertaH ? '▾ Semana ' + sH : '▸' + sH) + '</button></th>';
