@@ -88,8 +88,17 @@
   .tag.warn{background:color-mix(in srgb, var(--warn) 15%, transparent);color:var(--warn);border-color:transparent}
 
   .icon-link{background:none;border:0;cursor:pointer;font-size:13px;padding:1px 3px;line-height:1;margin-right:1px;text-decoration:none;display:inline-block}
-  .sem-fechada{text-align:center;color:var(--muted);padding-left:2px;padding-right:2px}
-  .sem-fechada .icon-link{padding:1px 2px;font-size:11px}
+
+  .mesx{overflow-x:auto;margin-top:8px;border:1px solid var(--grid);border-radius:10px}
+  .mestbl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11.5px;min-width:600px}
+  .mestbl th,.mestbl td{padding:8px 10px;border:1px solid var(--grid);text-align:left;vertical-align:top}
+  .mestbl thead th{background:var(--page);color:var(--text2);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;vertical-align:middle;text-align:center}
+  .mestbl thead th:first-child{text-align:left}
+  .mestbl td{color:var(--text2);white-space:normal;line-height:1.6}
+  .mestbl td:first-child{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sem-fechada{text-align:center;color:var(--muted)}
+  .sem-fechada .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);display:inline-block}
+  .mes-expand td{white-space:normal;background:var(--page)}
 
   .mini{background:none;border:1px solid var(--border);color:var(--text2);font:inherit;font-size:11.5px;padding:5px 10px;border-radius:999px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
   .mini.danger{color:var(--bad);border-color:transparent}
@@ -117,15 +126,6 @@
   .aviso{background:#fff3e6;border:1px solid var(--warn);color:#7a3d00;border-radius:8px;padding:10px 12px;font-size:12.5px;margin:8px 0;line-height:1.5}
   @media (prefers-color-scheme: dark){ .aviso{background:#3a2200;color:#ffce9e} }
   .vazio{font-size:13px;color:var(--muted);padding:10px 0}
-
-  .mesx{overflow-x:auto;margin-top:8px}
-  .mestbl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11.5px;min-width:560px}
-  .mestbl th,.mestbl td{padding:8px;border-bottom:1px solid var(--grid);text-align:left;vertical-align:top}
-  .mestbl th{color:var(--text2);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;vertical-align:middle}
-  .mestbl td:first-child,.mestbl th:first-child{white-space:normal;text-align:left}
-  .mestbl td{color:var(--text2);white-space:normal;line-height:1.6}
-  .mestbl td:first-child{color:var(--text)}
-  .mes-expand td{white-space:normal;background:var(--page);padding:10px 12px;border-radius:10px}
 
   @media (max-width:480px){
     .row{flex-direction:column}
@@ -500,6 +500,29 @@ function formEditarHtml(p){
 
 /* ---------------- NUTRICIONISTA: agenda visual do mês ---------------- */
 function semanaDoMes(dia){ return Math.min(4, Math.ceil(dia / 7)); }
+var __medidorCtx = null;
+// Calcula a largura fixa da coluna "Paciente" a partir do nome mais comprido da
+// lista, pra nunca quebrar linha — e, se nem assim couber, vai diminuindo a fonte
+// até caber dentro da largura máxima.
+function medidaColunaPaciente(nomes){
+  if (!__medidorCtx) __medidorCtx = document.createElement('canvas').getContext('2d');
+  var overhead = 66, minLargura = 150, maxLargura = 260;
+  var fontes = [12, 11.5, 11, 10.5, 10, 9.5, 9];
+  var resultado = { largura: minLargura, fonte: fontes[fontes.length - 1] };
+  for (var i = 0; i < fontes.length; i++){
+    var fs = fontes[i];
+    __medidorCtx.font = '600 ' + fs + 'px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+    var maiorTexto = 0;
+    (nomes || []).forEach(function(nome){
+      var w = __medidorCtx.measureText(String(nome || '')).width;
+      if (w > maiorTexto) maiorTexto = w;
+    });
+    var largura = Math.max(minLargura, Math.round(maiorTexto + overhead));
+    resultado = { largura: Math.min(maxLargura, largura), fonte: fs };
+    if (largura <= maxLargura) break;
+  }
+  return resultado;
+}
 function renderAgendaMes(){
   var box = document.getElementById('card-agenda-mes');
   var nutriNomeFull = nutriSel === 'mario' ? 'Dr. Mário' : 'Dra. Tomázia';
@@ -516,9 +539,15 @@ function renderAgendaMes(){
   } else {
     var qtdAbertas = 0;
     for (var sC = 1; sC <= 4; sC++){ if (semanasAbertas[sC]) qtdAbertas++; }
-    var larguraPaciente = 30, larguraFechada = 6;
-    var larguraAberta = qtdAbertas ? (100 - larguraPaciente - larguraFechada * (4 - qtdAbertas)) / qtdAbertas : 0;
-    h += '<div class="mesx"><table class="mestbl"><colgroup><col style="width:' + larguraPaciente + '%">';
+    // Coluna do paciente: largura FIXA em px (não depende de quantas semanas estão
+    // abertas), calculada a partir do nome mais comprido da lista — assim nunca quebra.
+    var medidaPaciente = medidaColunaPaciente(pacientesNutri.map(function(item){ return item.p.nome; }));
+    var alvoFechada = 8, alvoAberta = 24;
+    var totalAlvoSemanas = alvoFechada * (4 - qtdAbertas) + alvoAberta * qtdAbertas;
+    var fatorSemanas = totalAlvoSemanas ? 100 / totalAlvoSemanas : 25;
+    var larguraFechada = alvoFechada * fatorSemanas;
+    var larguraAberta = alvoAberta * fatorSemanas;
+    h += '<div class="mesx"><table class="mestbl"><colgroup><col style="width:' + medidaPaciente.largura + 'px">';
     for (var sG = 1; sG <= 4; sG++){
       h += '<col style="width:' + (semanasAbertas[sG] ? larguraAberta : larguraFechada) + '%">';
     }
@@ -536,25 +565,25 @@ function renderAgendaMes(){
         var dia = parseInt(String(a.data).slice(8,10), 10);
         porSemana[semanaDoMes(dia)].push(a);
       });
-      h += '<tr><td>'
+      h += '<tr><td style="font-size:' + medidaPaciente.fonte + 'px">'
          + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Agendar">📅</button>'
          + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
          + esc(p.nome) + (naoAgendou ? ' <span class="tag off">não agendou</span>' : '') + '</td>';
       for (var s = 1; s <= 4; s++){
         var aberta = !!semanasAbertas[s];
         if (!aberta){
-          h += '<td class="sem-fechada">' + (porSemana[s].length ? '<span class="muted">●</span>' : '') + '</td>';
+          h += '<td class="sem-fechada">' + (porSemana[s].length ? '<span class="dot"></span>' : '') + '</td>';
           continue;
         }
         var cel = porSemana[s]
           .sort(function(a,b){ return (a.hora||'').localeCompare(b.hora||''); })
           .map(function(a){
-            var texto = fmtDataBR(a.data).slice(0,5) + (a.hora ? ' ' + String(a.hora).slice(0,5) : '');
+            var texto = fmtDataBR(a.data).slice(0,5) + (a.hora ? ' - ' + String(a.hora).slice(0,5) : '');
             var wa = p.telefone ? waLink(p.telefone, msgConfirmacaoNutri(p, a, nutriNomeFull)) : null;
             return texto + (wa ? ' <a class="icon-link wa" href="' + wa + '" target="_blank" rel="noopener" title="Confirmar WhatsApp">💬</a>' : '');
           })
           .join('<br>');
-        h += '<td>' + (cel || '—') + '</td>';
+        h += '<td>' + cel + '</td>';
       }
       h += '</tr>';
       if (ex.agendar) h += '<tr class="mes-expand"><td colspan="5">' + formAgendarHtml(p, naoAgendou, nutriMesSel) + '</td></tr>';
