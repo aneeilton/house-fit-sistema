@@ -127,6 +127,17 @@
     .row{flex-direction:column}
     .acoes{width:100%}
   }
+
+  /* Tela de PC: aproveita a largura em vez de ficar uma coluna estreita centralizada */
+  @media (min-width:900px){
+    .wrap{max-width:1180px}
+    #area-nutri.active{display:grid;grid-template-columns:3fr 2fr;gap:16px;align-items:start}
+    #area-nutri > .toolbar{grid-column:1 / -1}
+    #area-visit.active{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+    #area-visit > .toolbar{grid-column:1 / -1}
+    #card-validade{display:grid;grid-template-columns:2fr 3fr;gap:16px;align-items:start}
+    #card-validade > .card:first-child{grid-column:1 / -1}
+  }
 </style>
 </head><body>
 
