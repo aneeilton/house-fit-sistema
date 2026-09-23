@@ -606,6 +606,8 @@
     font-size: 12px; color: var(--series-1); text-decoration: none;
     padding: 3px 10px; border: 1px solid var(--grid); border-radius: 999px;
   }
+  .card-compromissos .mod-item .acoes-inline { margin-left: auto; flex: none; display: flex; gap: 6px; }
+  .card-compromissos .mod-item .acoes-inline .mod-mini { margin-left: 0; }
   .card-compromissos .mod-setor { margin: 14px 0 4px; }
 
   /* Checklist — itens com link para relatórios externos */
@@ -707,7 +709,6 @@
         <div class="cardsub">Réplica da aba "Contas a pagar", por grupo e item — Realizado alimentado pelas despesas lançadas em Lançamento</div>
         <div class="scroll-table"><table class="datatable" id="tabela-contaspagar"></table></div>
       </div>
-      <div class="card" id="card-repasse-nutri"></div>
     </div>
 
     <!-- CONCILIACAO -->
@@ -807,7 +808,7 @@ function mesLabelTop(ym){
   var p = ym.split('-'); return MESES_PT_TOP[parseInt(p[1],10)-1] + '/' + p[0];
 }
 
-const EXTERNAL = {"saldo_suplem_mes_anterior": -75.57, "margem_suplementos": {"venda_bruta": 0, "custo_venda": 0, "taxa_cartao": 0, "margem_comercial": 0, "quebra": 0, "margem_final": 0, "custo_lancado": false, "estoque_custo": 28073.76, "estoque_venda": 45450.95}, "nextfit_planos": {"disponivel": true, "mes": "Agosto/2026", "base": "vencimento", "recebido": 33368.61, "em_aberto": 14417.03, "em_andamento": 59.9, "cancelado": 0.0, "total": 47845.54, "atualizado_em": "26/08/2026, 13:21"}, "confronto_online": {"Dinheiro": 1112.78, "C6": 30584.31, "Infinity": 1266.85, "total": 32963.94}, "contas_pagar": {"mes": "Agosto/2026", "grupos": [{"nome": "FOLHA DE PESSOAL", "planejado": 10962.25, "realizado": 0, "itens": [{"nome": "Personal Nataly", "planejado": 2500, "realizado": null}, {"nome": "Estagio Cauã", "planejado": 1700, "realizado": null}, {"nome": "Recepção Bruna", "planejado": 1621, "realizado": null}, {"nome": "Recepção Evelyn", "planejado": 1000, "realizado": null}, {"nome": "Suporte Eric", "planejado": 1750, "realizado": null}, {"nome": "Estagio Usiane", "planejado": 850, "realizado": null}, {"nome": "Limpeza  Priscila", "planejado": 600, "realizado": null}, {"nome": "Comissões", "planejado": 500, "realizado": null}, {"nome": "Horas extras (Feriado)", "planejado": 90, "realizado": null}, {"nome": "Impostos INSS", "planejado": 121.57, "realizado": null}, {"nome": "Imposto FGTS", "planejado": 129.68, "realizado": null}, {"nome": "CIEE estagio Cauã", "planejado": 100, "realizado": null}]}, {"nome": "PARCEIROS", "planejado": 2561.0, "realizado": 1751, "itens": [{"nome": "Aula Balé - Emily", "planejado": 258, "realizado": 258}, {"nome": "Aula Dança - Karina", "planejado": 677, "realizado": 677}, {"nome": "Aula Muay Thai - Tico", "planejado": 726, "realizado": 726}, {"nome": "Nutri Mario", "planejado": 450.0, "realizado": 90}, {"nome": "Nutri Tomazia", "planejado": 450.0, "realizado": null}]}, {"nome": "SISTEMAS", "planejado": 591.7, "realizado": 0, "itens": [{"nome": "Moro suplementos", "planejado": 120, "realizado": null}, {"nome": "Nextfit", "planejado": 447.8, "realizado": null}, {"nome": "Spotfy", "planejado": 23.9, "realizado": null}]}, {"nome": "SERVIÇOS PRESTADOS", "planejado": 1300.0, "realizado": 0, "itens": [{"nome": "Lavanderia toalhas", "planejado": 112, "realizado": null}, {"nome": "Criação cards e videos", "planejado": 650.0, "realizado": null}]}, {"nome": "BENS DURAVEIS", "planejado": 1000, "realizado": 0, "itens": []}, {"nome": "MATERIAL DE EXPEDIENTE", "planejado": 500, "realizado": 0, "itens": []}, {"nome": "IMPOSTOS E TAXAS", "planejado": 1321.18, "realizado": 0, "itens": [{"nome": "DAE - imposto de compra suple", "planejado": 106.35, "realizado": null}, {"nome": "DAS - Simples Nacional", "planejado": 714.83, "realizado": null}, {"nome": "Maquina infinity", "planejado": 250, "realizado": null}, {"nome": "NexfitPay", "planejado": 250, "realizado": null}]}, {"nome": "FIXAS / CONSUMO", "planejado": 4767.34, "realizado": 178, "itens": [{"nome": "Aluguel", "planejado": 3263.5, "realizado": null}, {"nome": "Energia Elétrica / Solar", "planejado": 862.61, "realizado": null}, {"nome": "Água / esgoto", "planejado": 43.23, "realizado": null}, {"nome": "Plano celular", "planejado": 60, "realizado": null}, {"nome": "Internet", "planejado": 60, "realizado": null}, {"nome": "Contador (a)", "planejado": 300, "realizado": null}, {"nome": "Energia ponto Zoraide", "planejado": 178, "realizado": 178}]}, {"nome": "OUTROS", "planejado": 300, "realizado": 0, "itens": []}], "total": {"planejado": 23303.47, "realizado": 1929}}, "anual": [{"mes": "Jan", "despesas": 161.0, "receita": 2069.0, "confiavel": false}, {"mes": "Fev", "despesas": 1222.0, "receita": 14561.02, "confiavel": false}, {"mes": "Mar", "despesas": 552.4, "receita": 58285.27, "confiavel": false}, {"mes": "Abr", "despesas": 5302.49, "receita": 53773.6, "confiavel": false}, {"mes": "Mai", "despesas": 6933.87, "receita": 69574.0, "confiavel": false}, {"mes": "Jun", "despesas": 25745.71, "receita": 45902.65, "confiavel": true, "compras": 3500.83, "sup": 10414.99, "plan": 35487.66}, {"mes": "Jul", "despesas": 23245.02, "receita": 47773.45, "confiavel": true, "compras": 9109.8, "sup": 10058.35, "plan": 37715.1}, {"mes": "Ago", "despesas": 8797.05, "receita": 44504.76, "confiavel": true, "compras": 2668.2, "sup": 9468.91, "plan": 35035.85}]};
+const EXTERNAL = {"saldo_suplem_mes_anterior": -75.57, "margem_suplementos": {"venda_bruta": 0, "custo_venda": 0, "taxa_cartao": 0, "margem_comercial": 0, "quebra": 0, "margem_final": 0, "custo_lancado": false, "estoque_custo": 28073.76, "estoque_venda": 45450.95}, "nextfit_planos": {"disponivel": true, "mes": "Agosto/2026", "base": "vencimento", "recebido": 33368.61, "em_aberto": 14417.03, "em_andamento": 59.9, "cancelado": 0.0, "total": 47845.54, "atualizado_em": "26/08/2026, 13:21"}, "confronto_online": {"Dinheiro": 1112.78, "C6": 30584.31, "Infinity": 1266.85, "total": 32963.94}, "contas_pagar": {"mes": "Agosto/2026", "grupos": [{"nome": "FOLHA DE PESSOAL", "planejado": 10962.25, "realizado": 0, "itens": [{"nome": "Personal Nataly", "planejado": 2500, "realizado": null}, {"nome": "Estagio Cauã", "planejado": 1700, "realizado": null}, {"nome": "Recepção Bruna", "planejado": 1621, "realizado": null}, {"nome": "Recepção Evelyn", "planejado": 1000, "realizado": null}, {"nome": "Suporte Eric", "planejado": 1750, "realizado": null}, {"nome": "Estagio Usiane", "planejado": 850, "realizado": null}, {"nome": "Limpeza  Priscila", "planejado": 600, "realizado": null}, {"nome": "Comissões", "planejado": 500, "realizado": null}, {"nome": "Horas extras (Feriado)", "planejado": 90, "realizado": null}, {"nome": "Impostos INSS", "planejado": 121.57, "realizado": null}, {"nome": "Imposto FGTS", "planejado": 129.68, "realizado": null}, {"nome": "CIEE estagio Cauã", "planejado": 100, "realizado": null}]}, {"nome": "PARCEIROS", "planejado": 2561.0, "realizado": 1751, "itens": [{"nome": "Aula Balé - Emily", "planejado": 258, "realizado": 258}, {"nome": "Aula Dança - Karina", "planejado": 677, "realizado": 677}, {"nome": "Aula Muay Thai - Tico", "planejado": 726, "realizado": 726}, {"nome": "Nutri Mario", "planejado": 450.0, "realizado": 90}, {"nome": "Nutri Tomazia", "planejado": 450.0, "realizado": null}]}, {"nome": "SISTEMAS", "planejado": 591.7, "realizado": 0, "itens": [{"nome": "Moro suplementos", "planejado": 120, "realizado": null}, {"nome": "Nextfit", "planejado": 447.8, "realizado": null}, {"nome": "Spotfy", "planejado": 23.9, "realizado": null}]}, {"nome": "SERVIÇOS PRESTADOS", "planejado": 1300.0, "realizado": 0, "itens": [{"nome": "Lavanderia toalhas", "planejado": 112, "realizado": null}, {"nome": "Criação cards e videos", "planejado": 650.0, "realizado": null}]}, {"nome": "BENS DURAVEIS", "planejado": 1000, "realizado": 0, "itens": []}, {"nome": "MATERIAL DE EXPEDIENTE", "planejado": 500, "realizado": 0, "itens": []}, {"nome": "IMPOSTOS E TAXAS", "planejado": 1321.18, "realizado": 0, "itens": [{"nome": "DAE - imposto de compra suple", "planejado": 106.35, "realizado": null}, {"nome": "DAS - Simples Nacional", "planejado": 714.83, "realizado": null}, {"nome": "Maquina infinity", "planejado": 250, "realizado": null}, {"nome": "NexfitPay", "planejado": 250, "realizado": null}]}, {"nome": "FIXAS / CONSUMO", "planejado": 4767.34, "realizado": 178, "itens": [{"nome": "Aluguel", "planejado": 3263.5, "realizado": null}, {"nome": "Energia Elétrica / Solar", "planejado": 862.61, "realizado": null}, {"nome": "Água / esgoto", "planejado": 43.23, "realizado": null}, {"nome": "Plano celular", "planejado": 60, "realizado": null}, {"nome": "Internet", "planejado": 60, "realizado": null}, {"nome": "Contador (a)", "planejado": 300, "realizado": null}]}, {"nome": "OUTROS", "planejado": 300, "realizado": 0, "itens": []}], "total": {"planejado": 23303.47, "realizado": 1929}}, "anual": [{"mes": "Jan", "despesas": 161.0, "receita": 2069.0, "confiavel": false}, {"mes": "Fev", "despesas": 1222.0, "receita": 14561.02, "confiavel": false}, {"mes": "Mar", "despesas": 552.4, "receita": 58285.27, "confiavel": false}, {"mes": "Abr", "despesas": 5302.49, "receita": 53773.6, "confiavel": false}, {"mes": "Mai", "despesas": 6933.87, "receita": 69574.0, "confiavel": false}, {"mes": "Jun", "despesas": 25745.71, "receita": 45902.65, "confiavel": true, "compras": 3500.83, "sup": 10414.99, "plan": 35487.66}, {"mes": "Jul", "despesas": 23245.02, "receita": 47773.45, "confiavel": true, "compras": 9109.8, "sup": 10058.35, "plan": 37715.1}, {"mes": "Ago", "despesas": 8797.05, "receita": 44504.76, "confiavel": true, "compras": 2668.2, "sup": 9468.91, "plan": 35035.85}]};
 
 const ANUAL_SOCIOS = [
   { mes: "Fevereiro", planos: { receita: null, despesas: null, saldo: -497.00, emConta: null, ramon: null, anai: null }, suplementos: { ramon: 1262.04, anai: 420.68 } },
@@ -1643,6 +1644,19 @@ window.carregarStatusContasPagar = async function(ym){
   } catch(e){ return window.statusContasPagarPorMes[ym] || {}; }
 };
 
+async function salvarStatusContaPagar(nome, novo, ym){
+  var pagoEm = novo === 'pago' ? todayISOTop() : null;
+  window.statusContasPagarPorMes[ym] = window.statusContasPagarPorMes[ym] || {};
+  window.statusContasPagarPorMes[ym][nome] = { status: novo, pago_em: pagoEm || '', valor_pago: null };
+  if (!window.sb) return;
+  var res = await window.sb.from('contas_pagar_status')
+    .upsert({ item_nome: nome, competencia: ym, status: novo, pago_em: pagoEm }, { onConflict: 'item_nome,competencia' });
+  if (res.error){
+    console.error('Não consegui salvar a situação de "' + nome + '":', res.error);
+    alert('Não consegui salvar a situação de "' + nome + '". Confira se ainda está logado e tente de novo.');
+  }
+}
+
 window.renderContasPagar = function renderContasPagar() {
   DATA = buildData();
   const cp = DATA.contas_pagar;
@@ -1660,13 +1674,17 @@ window.renderContasPagar = function renderContasPagar() {
   kpiC.appendChild(cardRestante);
 
   let rows = '';
+  var autoPagar = [];
   cp.grupos.forEach(g => {
     rows += `<tr class="group-row"><td>${g.nome}</td><td class="num">${fmtBRL(g.planejado)}</td><td class="num">${fmtBRL(g.realizado)}</td><td></td><td></td></tr>`;
     g.itens.forEach(it => {
       var diaSalvo = venc[it.nome];
       var st = (stMap[it.nome] && stMap[it.nome].status) || 'aberto';
+      var travadoPago = it.realizado != null;
+      if (travadoPago && st !== 'pago'){ st = 'pago'; autoPagar.push(it.nome); }
       var nomeEsc = it.nome.replace(/"/g,'&quot;');
-      var sel = `<select class="cp-status-sel" data-item="${nomeEsc}" data-st="${st}">`
+      var selAttrs = travadoPago ? ' disabled title="Marcado como pago automaticamente porque já existe um lançamento em Realizado"' : '';
+      var sel = `<select class="cp-status-sel" data-item="${nomeEsc}" data-st="${st}"${selAttrs}>`
         + `<option value="aberto"${st==='aberto'?' selected':''}>Em aberto</option>`
         + `<option value="agendado"${st==='agendado'?' selected':''}>Agendado</option>`
         + `<option value="pago"${st==='pago'?' selected':''}>Pago</option></select>`;
@@ -1676,6 +1694,8 @@ window.renderContasPagar = function renderContasPagar() {
   rows += `<tr><td>TOTAL</td><td class="num">${fmtBRL(cp.total.planejado)}</td><td class="num">${fmtBRL(cp.total.realizado)}</td><td></td><td></td></tr>`;
   document.getElementById('tabela-contaspagar').innerHTML =
     `<thead><tr><th>Grupo / item</th><th class="num">Planejado</th><th class="num">Realizado</th><th class="num">Vence dia</th><th>Situação</th></tr></thead><tbody>${rows}</tbody>`;
+
+  autoPagar.forEach(function(nome){ salvarStatusContaPagar(nome, 'pago', ymCp); });
 
   var tbl = document.getElementById('tabela-contaspagar');
   if (tbl && !tbl.dataset.wired){
@@ -1688,7 +1708,10 @@ window.renderContasPagar = function renderContasPagar() {
         if (dia != null && (dia < 1 || dia > 31)){ el.value = ''; return; }
         window.vencimentosPorItem = window.vencimentosPorItem || {};
         window.vencimentosPorItem[itemNome] = dia;
-        if (window.sb) await window.sb.from('contas_pagar_vencimentos').upsert({ item_nome: itemNome, dia_vencimento: dia });
+        if (window.sb){
+          var resV = await window.sb.from('contas_pagar_vencimentos').upsert({ item_nome: itemNome, dia_vencimento: dia });
+          if (resV.error){ console.error('Não consegui salvar o dia de vencimento:', resV.error); alert('Não consegui salvar o dia de vencimento. Confira se ainda está logado e tente de novo.'); }
+        }
         return;
       }
       if (el.classList && el.classList.contains('cp-status-sel')){
@@ -1696,11 +1719,7 @@ window.renderContasPagar = function renderContasPagar() {
         var novo = el.value;
         var ym = window.mesGlobal || todayISOTop().slice(0,7);
         el.setAttribute('data-st', novo);
-        var pagoEm = novo === 'pago' ? todayISOTop() : null;
-        window.statusContasPagarPorMes[ym] = window.statusContasPagarPorMes[ym] || {};
-        window.statusContasPagarPorMes[ym][nome] = { status: novo, pago_em: pagoEm || '', valor_pago: null };
-        if (window.sb) await window.sb.from('contas_pagar_status')
-          .upsert({ item_nome: nome, competencia: ym, status: novo, pago_em: pagoEm }, { onConflict: 'item_nome,competencia' });
+        await salvarStatusContaPagar(nome, novo, ym);
         if (window.repaintInicio) window.repaintInicio();
         return;
       }
@@ -1708,47 +1727,6 @@ window.renderContasPagar = function renderContasPagar() {
   }
 };
 renderContasPagar();
-
-// Espelha da página de recepção (recepcao.html): pacientes de nutrição marcados
-// como Plano 1 / Consulta 1 — ciclo em que a academia deve repasse ao nutricionista.
-// Somente leitura aqui; o cadastro/edição continua feito na recepção.
-window.renderRepasseNutri = async function renderRepasseNutri(){
-  var box = document.getElementById('card-repasse-nutri');
-  if (!box || !window.sb) return;
-  var ym = window.mesGlobal || todayISOTop().slice(0,7);
-  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  try{
-    var rPac = await sb.from('nutri_pacientes').select('id, nutricionista, nome, tipo, ativo');
-    var rAg = await sb.from('nutri_agendamentos').select('paciente_id, data, status');
-    var pacientes = (rPac.data || []).filter(function(p){ return p.ativo !== false && (p.tipo === 'plano1' || p.tipo === 'consulta1'); });
-    var agendadosSet = {};
-    (rAg.data || []).forEach(function(a){
-      if (a.status === 'cancelado' || a.status === 'recusou') return;
-      if (String(a.data).slice(0,7) !== ym) return;
-      agendadosSet[a.paciente_id] = true;
-    });
-    function blocoNutri(nutri, label){
-      var lista = pacientes.filter(function(p){ return p.nutricionista === nutri; });
-      var h = '<div class="ger-mod"><div class="ger-mod-nome">' + label + ' — ' + lista.length + ' pacientes em Plano 1 / Consulta 1</div>';
-      if (!lista.length){
-        h += '<div class="cardsub">Nenhum paciente nesse ciclo no momento.</div>';
-      } else {
-        lista.forEach(function(p){
-          var ok = !!agendadosSet[p.id];
-          h += '<div class="mod-item"><span class="txt">' + esc(p.nome) + '</span><span class="mod-tag' + (ok ? ' ok' : '') + '">' + (ok ? 'agendado' : 'sem agendamento') + '</span></div>';
-        });
-      }
-      h += '</div>';
-      return h;
-    }
-    var h = '<h3>Repasse devido — Nutricionistas</h3>';
-    h += '<div class="cardsub">Espelhado da página de recepção — referência: ' + mesLabelTop(ym) + '. Cadastro e agenda continuam sendo feitos por lá.</div>';
-    h += blocoNutri('mario', 'Dr. Mário');
-    h += blocoNutri('tomazia', 'Dra. Tomázia');
-    box.innerHTML = h;
-  }catch(e){ box.innerHTML = '<h3>Repasse devido — Nutricionistas</h3><div class="cardsub">Não consegui carregar os dados da recepção agora.</div>'; }
-};
-window.renderRepasseNutri();
 
 // ================= CONCILIACAO =================
 // ================= CONCILIACAO (tabela dia a dia) =================
@@ -3630,11 +3608,14 @@ window.initMenu = function initMenu(){
     var h = hoje();
     var seg = new Date(h+'T00:00:00'); seg.setDate(seg.getDate() - ((seg.getDay()+6)%7));
     var ciclo = { diario: h, semanal: 'S' + seg.toISOString().slice(0,10), mensal: h.slice(0,7) };
+    function feitoCk(i){ return exec.some(function(x){ return x.itemId === i.id && x.ciclo === ciclo[i.bloco]; }); }
     var ok = 0;
-    itens.forEach(function(i){
-      if (exec.some(function(x){ return x.itemId === i.id && x.ciclo === ciclo[i.bloco]; })) ok++;
-    });
-    return { ok: ok, total: itens.length };
+    itens.forEach(function(i){ if (feitoCk(i)) ok++; });
+    return {
+      ok: ok, total: itens.length,
+      pendHoje: itens.filter(function(i){ return i.bloco === 'diario' && !feitoCk(i); }),
+      pendSemana: itens.filter(function(i){ return i.bloco === 'semanal' && !feitoCk(i); })
+    };
   }
 
   function dadosValidade(){
@@ -3776,6 +3757,9 @@ window.initMenu = function initMenu(){
     if (window.satisfacaoResumoAtual && window.satisfacaoResumoAtual.naoLidas)
       av(window.satisfacaoResumoAtual.naoLidas + (window.satisfacaoResumoAtual.naoLidas === 1 ? ' pesquisa de satisfação não lida' : ' pesquisas de satisfação não lidas'), 'satisfacao', 6);
 
+    var tratadosHoje = window._avisosTratados || {};
+    avisos.forEach(function(a){ a.chave = hoje() + '|' + a.goto + '|' + a.txt; });
+    avisos = avisos.filter(function(a){ return !tratadosHoje[a.chave]; });
     avisos.sort(function(a, b){ return (a.pri || 9) - (b.pri || 9); });
 
     h += '<div class="mod-setor">Avisos</div>';
@@ -3783,7 +3767,10 @@ window.initMenu = function initMenu(){
       h += '<div class="mod-vazio">Tudo em dia.</div>';
     } else {
       avisos.slice(0, 7).forEach(function(a){
-        h += '<div class="mod-item"><span class="txt">' + escH(a.txt) + '</span><button class="mod-mini" data-goto="' + a.goto + '">ver</button></div>';
+        h += '<div class="mod-item"><span class="txt">' + escH(a.txt) + '</span><span class="acoes-inline">'
+           + '<button class="mod-mini" data-goto="' + a.goto + '">ver</button>'
+           + '<button class="mod-mini" data-tratar="' + escH(a.chave).replace(/"/g,'&quot;') + '" title="Marcar como já resolvido/ajustado — some da lista de hoje">tratado</button>'
+           + '</span></div>';
       });
       if (avisos.length > 7)
         h += '<div class="mod-item"><span class="txt" style="color:var(--muted)">+ ' + (avisos.length - 7) + ' outros avisos</span></div>';
@@ -3810,7 +3797,19 @@ window.initMenu = function initMenu(){
     h += '<div style="height:6px;border-radius:999px;background:var(--grid);overflow:hidden;margin:10px 0 4px">';
     h += '<i style="display:block;height:100%;width:' + pctCk + '%;background:var(--series-1)"></i></div>';
     h += '<div class="mod-item" style="border:0"><span class="mod-msg">' + ck.ok + ' de ' + ck.total + ' itens feitos</span>';
-    h += '<button class="mod-mini" data-goto="checklist">abrir</button></div></div>';
+    h += '<button class="mod-mini" data-goto="checklist">abrir tudo</button></div>';
+    [['Pendentes hoje', ck.pendHoje], ['Pendentes esta semana', ck.pendSemana]].forEach(function(grp){
+      var titulo = grp[0], lista = grp[1];
+      if (!lista.length) return;
+      h += '<div class="mod-setor">' + titulo + '</div>';
+      lista.forEach(function(i){
+        h += '<div class="mod-item" style="padding:6px 0;border:0"><span class="txt">' + escH(i.titulo) + '</span></div>';
+      });
+    });
+    if (ck.total && !ck.pendHoje.length && !ck.pendSemana.length){
+      h += '<div class="mod-vazio">Nada pendente hoje ou nesta semana.</div>';
+    }
+    h += '</div>';
 
     /* ---- Card 4: Aniversários próximos ---- */
     var aniv = ((L.colaboradores) || [])
@@ -3831,7 +3830,19 @@ window.initMenu = function initMenu(){
     box.innerHTML = h;
   }
 
-  box.addEventListener('click', function(e){
+  box.addEventListener('click', async function(e){
+    var bt = e.target.closest ? e.target.closest('[data-tratar]') : null;
+    if (bt){
+      var chave = bt.getAttribute('data-tratar');
+      window._avisosTratados = window._avisosTratados || {};
+      window._avisosTratados[chave] = true;
+      paint();
+      if (window.sb){
+        var res = await window.sb.from('avisos_tratados').upsert({ chave: chave, tratado_em: new Date().toISOString() });
+        if (res.error) console.error('Não consegui salvar o aviso tratado:', res.error);
+      }
+      return;
+    }
     var b = e.target.closest ? e.target.closest('[data-goto]') : null;
     if (!b) return;
     var alvo = document.querySelector('.tab[data-view="' + b.getAttribute('data-goto') + '"]');
@@ -3873,6 +3884,15 @@ window.initMenu = function initMenu(){
 
   window.sb.from('compromissos').select('*').eq('data', hoje()).then(function(res){
     if (!res.error){ window._compromissosHoje = res.data || []; paint(); }
+  }).catch(function(){});
+
+  window.sb.from('avisos_tratados').select('chave').like('chave', hoje() + '|%').then(function(res){
+    if (!res.error){
+      var map = {};
+      (res.data || []).forEach(function(r){ map[r.chave] = true; });
+      window._avisosTratados = map;
+      paint();
+    }
   }).catch(function(){});
 };
 
@@ -3924,7 +3944,6 @@ window.initMenu = function initMenu(){
       if (window.renderDiaria) window.renderDiaria();
       if (window.carregarStatusContasPagar) await window.carregarStatusContasPagar(window.mesGlobal);
       if (window.renderContasPagar) window.renderContasPagar();
-      if (window.renderRepasseNutri) window.renderRepasseNutri();
       if (window.renderConciliacaoDias) window.renderConciliacaoDias();
       if (window.renderAnual) window.renderAnual();
       if (window.setMesGerencial) await window.setMesGerencial(window.mesGlobal);
@@ -3940,7 +3959,6 @@ window.initMenu = function initMenu(){
       await window.initSaldoOnline();
       if (window.renderDiaria) window.renderDiaria();
       if (window.renderContasPagar) window.renderContasPagar();
-      if (window.renderRepasseNutri) window.renderRepasseNutri();
       if (window.renderConciliacaoDias) window.renderConciliacaoDias();
       if (window.renderAnual) window.renderAnual();
       if (window.renderConciliacaoHistorico) window.renderConciliacaoHistorico();
