@@ -666,7 +666,11 @@ document.getElementById('btn-novo-paciente').addEventListener('click', function(
     var novo = { id: uid(), nutricionista: nutriSel, nome: nome, telefone: tel || null, tipo: tipo, ativo: true };
     var r = await sb.from('nutri_pacientes').insert(novo).select().single();
     this.disabled = false;
-    if (r.error){ document.getElementById('np-msg').textContent = 'Erro ao salvar.'; return; }
+    if (r.error){
+      console.error('Erro ao salvar paciente:', r.error);
+      document.getElementById('np-msg').textContent = 'Erro ao salvar: ' + (r.error.message || r.error.code || 'motivo desconhecido');
+      return;
+    }
     PACIENTES.push(r.data);
     box.hidden = true;
     renderRepasse(); renderAgendaMes();
@@ -700,7 +704,11 @@ async function onPacienteAreaClick(e){
     var novo = { id: uid(), paciente_id: v, data: dEl.value, hora: hEl.value || null, status: 'agendado' };
     var r = await sb.from('nutri_agendamentos').insert(novo).select().single();
     t.disabled = false;
-    if (r.error){ alert('Não consegui salvar o agendamento.'); return; }
+    if (r.error){
+      console.error('Erro ao salvar agendamento:', r.error);
+      alert('Não consegui salvar o agendamento: ' + (r.error.message || r.error.code || 'motivo desconhecido'));
+      return;
+    }
     AGEND.push(r.data);
     pacExpand[v].agendar = false;
     renderRepasse(); renderAgendaMes();
@@ -914,7 +922,11 @@ document.getElementById('btn-novo-visitante').addEventListener('click', function
     };
     var r = await sb.from('visitantes').insert(novo).select().single();
     btn.disabled = false;
-    if (r.error){ document.getElementById('nv-msg').textContent = 'Erro ao salvar.'; return; }
+    if (r.error){
+      console.error('Erro ao salvar visitante:', r.error);
+      document.getElementById('nv-msg').textContent = 'Erro ao salvar: ' + (r.error.message || r.error.code || 'motivo desconhecido');
+      return;
+    }
     VISIT.push(r.data);
     box.hidden = true;
     renderVisitantes();
