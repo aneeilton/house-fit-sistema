@@ -3696,16 +3696,17 @@ window.initMenu = function initMenu(){
     if (conc.cls === 'alerta')
       av('Caixa não bateu — ' + conc.txt, 'conciliacao', 1);
 
-    // 2/3 — contas a pagar: nomeia as 3 mais urgentes
+    // 2/3 — contas a pagar: um único lembrete, mesmo com várias vencendo
     if (vencendo.length){
       var vs = vencendo.slice().sort(function(a,b){ return a.diasRestantes - b.diasRestantes; });
-      vs.slice(0, 3).forEach(function(v){
-        var ad = Math.abs(v.diasRestantes);
-        var q = v.diasRestantes < 0 ? ('venceu há ' + ad + (ad === 1 ? ' dia' : ' dias'))
-              : (v.diasRestantes === 0 ? 'vence hoje' : 'vence em ' + v.diasRestantes + (v.diasRestantes === 1 ? ' dia' : ' dias'));
-        av(v.nome + ' — ' + q, 'contaspagar', v.diasRestantes < 0 ? 2 : 3);
-      });
-      if (vs.length > 3) av('+ ' + (vs.length - 3) + ' outras contas a vencer', 'contaspagar', 3);
+      var maisUrgente = vs[0];
+      var adU = Math.abs(maisUrgente.diasRestantes);
+      var qU = maisUrgente.diasRestantes < 0 ? ('venceu há ' + adU + (adU === 1 ? ' dia' : ' dias'))
+             : (maisUrgente.diasRestantes === 0 ? 'vence hoje' : 'vence em ' + maisUrgente.diasRestantes + (maisUrgente.diasRestantes === 1 ? ' dia' : ' dias'));
+      var textoCp = vs.length === 1
+        ? (maisUrgente.nome + ' — ' + qU)
+        : (vs.length + ' contas a vencer — a mais próxima é ' + maisUrgente.nome + ' (' + qU + ')');
+      av(textoCp, 'contaspagar', maisUrgente.diasRestantes < 0 ? 2 : 3);
     }
 
     // 3 — lançamento parado
