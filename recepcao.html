@@ -479,7 +479,8 @@ function formAgendarHtml(p, naoAgendouAtual, ym){
          + '</select> <button class="mini danger" data-del-agenda="' + a.id + '">excluir</button></span></div>';
     });
   }
-  h += '<div class="field"><label>Nova data</label><input type="date" id="ag-data-' + p.id + '" value="' + todayISO() + '"></div>'
+  h += '<div class="rowsub" style="margin-top:10px">Novo agendamento — só clique em "Salvar" se for marcar uma consulta nova. Pra mudar o status de uma já existente, use o seletinho acima.</div>';
+  h += '<div class="field"><label>Data</label><input type="date" id="ag-data-' + p.id + '" value=""></div>'
     + '<div class="field"><label>Hora</label><input type="time" id="ag-hora-' + p.id + '"></div>'
     + '<div class="acoes"><button class="btn" data-salvar-agenda="' + p.id + '">Salvar agendamento</button>'
     + '<button class="btn-outline" data-nao-agendou="' + p.id + '">' + (naoAgendouAtual ? 'Desmarcar "não agendou"' : 'Não quis agendar este mês') + '</button></div>';
@@ -699,7 +700,7 @@ async function onPacienteAreaClick(e){
   }
   if (v = t.getAttribute('data-salvar-agenda')){
     var dEl = document.getElementById('ag-data-' + v), hEl = document.getElementById('ag-hora-' + v);
-    if (!dEl.value) return;
+    if (!dEl.value){ alert('Escolha a data do novo agendamento antes de salvar.'); return; }
     t.disabled = true;
     var novo = { id: uid(), paciente_id: v, data: dEl.value, hora: hEl.value || null, status: 'agendado' };
     var r = await sb.from('nutri_agendamentos').insert(novo).select().single();
