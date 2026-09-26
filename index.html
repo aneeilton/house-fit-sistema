@@ -4356,12 +4356,20 @@ window.initGerencial = async function initGerencial(){
 
   function notaFiscalAEmitir(ym, nexfitpayManual, notasPlanosManual, notasSuplementosManual){
     var listaPlanos = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.planos) ? LANCAMENTOS.planos : [];
-    var doMes = listaPlanos.filter(function(x){ return String(x.data||'').slice(0,7) === ym; });
-    var infinity = doMes.reduce(function(t,x){ return t + n(x.credito) + n(x.debito); }, 0);
+    var listaSup = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.suplementos) ? LANCAMENTOS.suplementos : [];
+    var doMesPlanos = listaPlanos.filter(function(x){ return String(x.data||'').slice(0,7) === ym; });
+    var doMesSup = listaSup.filter(function(x){ return String(x.data||'').slice(0,7) === ym; });
+    var infinityPlanos = doMesPlanos.reduce(function(t,x){ return t + n(x.credito) + n(x.debito); }, 0);
+    var infinitySuplementos = doMesSup.reduce(function(t,x){ return t + n(x.cartao); }, 0);
+    var infinity = infinityPlanos + infinitySuplementos;
     var nexfitpay = n(nexfitpayManual);
     var notasPlanos = n(notasPlanosManual);
     var notasSuplementos = n(notasSuplementosManual);
-    return { infinity: infinity, nexfitpay: nexfitpay, notasPlanos: notasPlanos, notasSuplementos: notasSuplementos, total: (infinity + nexfitpay) - (notasPlanos + notasSuplementos) };
+    return {
+      infinity: infinity, infinityPlanos: infinityPlanos, infinitySuplementos: infinitySuplementos,
+      nexfitpay: nexfitpay, notasPlanos: notasPlanos, notasSuplementos: notasSuplementos,
+      total: (infinity + nexfitpay) - (notasPlanos + notasSuplementos)
+    };
   }
 
   function calc(d, ymRef){
@@ -4488,7 +4496,9 @@ window.initGerencial = async function initGerencial(){
 
     h += '<div class="card"><h3>Nota fiscal a emitir</h3>';
     h += '<div class="cardsub">(NexfitPay + Infinity) menos as notas já emitidas de Planos e Suplementos. A diferença é o que ainda falta emitir pra fechar o fiscal do mês.</div>';
-    h += '<div class="mod-item"><span class="txt">Infinity (crédito + débito, Planos)</span><span class="mod-tag">' + brl(c.nf.infinity) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">Infinity — Planos (crédito + débito)</span><span class="mod-tag">' + brl(c.nf.infinityPlanos) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">Infinity — Suplementos (cartão)</span><span class="mod-tag">' + brl(c.nf.infinitySuplementos) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt"><b>Infinity total (Planos + Suplementos)</b></span><span class="mod-tag"><b>' + brl(c.nf.infinity) + '</b></span></div>';
     h += campo('ger-nf-nexfitpay', 'NexfitPay (venda no cartão online — digite)', dados.nf_nexfitpay);
     h += '<div class="ger-grid2">';
     h += campo('ger-nf-notas-planos', 'Notas emitidas — Planos', dados.nf_notas_planos);
