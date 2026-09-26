@@ -1460,7 +1460,7 @@ function confrontoTable(containerId, confronto) {
       </tbody>
     </table>
     <div style="margin-top:12px">
-      <span class="badge ${confronto.online.semDado ? 'warning' : (ok ? 'good' : 'critical')}">${confronto.online.semDado ? 'Sem base de comparação' : (ok ? 'Caixa batendo certo' : 'Diferença de ' + fmtBRL(Math.abs(diff)))}</span>
+      <span class="badge ${confronto.online.semDado ? 'warning' : (ok ? 'good' : 'critical')}">${confronto.online.semDado ? 'Sem base de comparação' : (ok ? 'Caixa batendo certo' : (diff < 0 ? 'Falta de ' + fmtBRL(Math.abs(diff)) : 'Sobra de ' + fmtBRL(Math.abs(diff))))}</span>
     </div>
     ${avisoOnline}
   `;
@@ -4283,6 +4283,17 @@ window.initGerencial = async function initGerencial(){
     return (neg?'-':'') + 'R$ ' + abs.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
   }
   function pct(v){ return v == null ? '—' : (v*100).toLocaleString('pt-BR',{maximumFractionDigits:1}) + '%'; }
+  // Máscara de moeda pros campos editáveis: digita só números, formata como R$ 1.150,20.
+  function maskBRL(v){
+    var digitos = String(v == null ? '' : v).replace(/\D/g, '');
+    if (!digitos) return '';
+    var num = parseInt(digitos, 10) / 100;
+    return 'R$ ' + num.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function parseBRL(v){
+    var digitos = String(v == null ? '' : v).replace(/\D/g, '');
+    return digitos ? parseInt(digitos, 10) / 100 : 0;
+  }
 
   var mesesDisponiveis = [];
   for (var i = 0; i < 15; i++){
@@ -4298,35 +4309,21 @@ window.initGerencial = async function initGerencial(){
   async function carregarResumoRecepcao(ym){
     try{
       var rVis = await sb.from('visitantes').select('tipo, data, virou_aluno');
-      var rPac = await sb.from('nutri_pacientes').select('id, nutricionista, tipo, ativo');
-      var rAg = await sb.from('nutri_agendamentos').select('paciente_id, data, status');
       var vis = (rVis.data || []).filter(function(v){ return String(v.data).slice(0,7) === ym; });
       var experimental = vis.filter(function(v){ return v.tipo === 'experimental'; }).length;
       var convidado = vis.filter(function(v){ return v.tipo === 'convidado'; }).length;
       var viraramAluno = vis.filter(function(v){ return v.virou_aluno; }).length;
-      var pacientes = (rPac.data || []).filter(function(p){ return p.ativo !== false && (p.tipo === 'plano1' || p.tipo === 'consulta1'); });
-      var agendadosSet = {};
-      (rAg.data || []).forEach(function(a){
-        if (a.status === 'cancelado' || a.status === 'recusou') return;
-        if (String(a.data).slice(0,7) !== ym) return;
-        agendadosSet[a.paciente_id] = true;
-      });
-      function repasseNutri(nutri){
-        var lista = pacientes.filter(function(p){ return p.nutricionista === nutri; });
-        var agendados = lista.filter(function(p){ return agendadosSet[p.id]; }).length;
-        return { total: lista.length, agendados: agendados };
-      }
-      return { experimental: experimental, convidado: convidado, viraramAluno: viraramAluno, mario: repasseNutri('mario'), tomazia: repasseNutri('tomazia') };
+      return { experimental: experimental, convidado: convidado, viraramAluno: viraramAluno };
     }catch(e){ return null; }
   }
 
   var CAMPOS_NUM = [
-    'quantidade_produtos','crediario','cartao','dinheiro_pix','custo_venda','quebra_doacao',
+    'quantidade_produtos','venda_bruta','crediario','cartao','dinheiro_pix','custo_venda',
     'saldo_mes_passado','compras_mes','valor_custo_estoque','valor_venda_estoque','em_transito',
     'fiado_a_vencer','fiado_vencido_mais60','fiado_vencido_menos60',
-    'musc_receita','musc_futuro','aulas_receita','aulas_futuro','atend_receita','atend_futuro',
+    'musc_receita','musc_futuro','aulas_receita','atend_receita',
     'arecceb_receita','arecceb_futuro','totalpass_receita','totalpass_futuro','wellhub_receita','wellhub_futuro',
-    'despesas_pagas','nf_nexfitpay'
+    'despesas_pagas','nf_nexfitpay','nf_notas_planos','nf_notas_suplementos'
   ];
 
   function vazio(){
@@ -4357,15 +4354,14 @@ window.initGerencial = async function initGerencial(){
       .reduce(function(t,x){ return t + n(x.valor); }, 0);
   }
 
-  function notaFiscalAEmitir(ym, nexfitpayManual){
+  function notaFiscalAEmitir(ym, nexfitpayManual, notasPlanosManual, notasSuplementosManual){
     var listaPlanos = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.planos) ? LANCAMENTOS.planos : [];
-    var listaSup = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.suplementos) ? LANCAMENTOS.suplementos : [];
     var doMes = listaPlanos.filter(function(x){ return String(x.data||'').slice(0,7) === ym; });
-    var doMesSup = listaSup.filter(function(x){ return String(x.data||'').slice(0,7) === ym; });
     var infinity = doMes.reduce(function(t,x){ return t + n(x.credito) + n(x.debito); }, 0);
     var nexfitpay = n(nexfitpayManual);
-    var suplemento = doMesSup.reduce(function(t,x){ return t + n(x.cartao); }, 0);
-    return { infinity: infinity, nexfitpay: nexfitpay, suplemento: suplemento, total: infinity + nexfitpay - suplemento };
+    var notasPlanos = n(notasPlanosManual);
+    var notasSuplementos = n(notasSuplementosManual);
+    return { infinity: infinity, nexfitpay: nexfitpay, notasPlanos: notasPlanos, notasSuplementos: notasSuplementos, total: (infinity + nexfitpay) - (notasPlanos + notasSuplementos) };
   }
 
   function calc(d, ymRef){
@@ -4373,22 +4369,21 @@ window.initGerencial = async function initGerencial(){
     var soma = n(d.crediario) + n(d.cartao) + n(d.dinheiro_pix);
     var margemComR = soma - n(d.custo_venda);
     var margemComP = soma ? margemComR / soma : null;
-    var margemFinR = margemComR - n(d.quebra_doacao);
-    var margemFinP = soma ? margemFinR / soma : null;
-    var supRamon = margemFinR * 0.75, supAnai = margemFinR * 0.25;
+    var supRamon = margemComR * 0.75, supAnai = margemComR * 0.25;
+    var diferencaVendaBruta = n(d.venda_bruta) - soma;
     var entradaReal = entradaRealSuplementos(ym);
     var saldoConta = n(d.saldo_mes_passado) + entradaReal - n(d.compras_mes) - supRamon - supAnai;
     var totalCrediario = n(d.fiado_a_vencer) + n(d.fiado_vencido_mais60) + n(d.fiado_vencido_menos60);
     var totalAtivosReceita = n(d.musc_receita)+n(d.aulas_receita)+n(d.atend_receita)+n(d.arecceb_receita)+n(d.totalpass_receita)+n(d.wellhub_receita);
-    var totalAtivosFuturo = n(d.musc_futuro)+n(d.aulas_futuro)+n(d.atend_futuro)+n(d.arecceb_futuro)+n(d.totalpass_futuro)+n(d.wellhub_futuro);
+    var totalAtivosFuturo = n(d.musc_futuro)+n(d.arecceb_futuro)+n(d.totalpass_futuro)+n(d.wellhub_futuro);
     var receitasPlanos = totalAtivosReceita;
     var despesasReal = despesasRealDoMes(ym);
-    var nf = notaFiscalAEmitir(ym, d.nf_nexfitpay);
+    var nf = notaFiscalAEmitir(ym, d.nf_nexfitpay, d.nf_notas_planos, d.nf_notas_suplementos);
     var saldoPlanos = receitasPlanos - despesasReal;
     var planosRamon = saldoPlanos * 0.75, planosAnai = saldoPlanos * 0.25;
     var geralRamon = planosRamon + supRamon, geralAnai = planosAnai + supAnai;
     return {
-      soma: soma, margemComR: margemComR, margemComP: margemComP, margemFinR: margemFinR, margemFinP: margemFinP,
+      soma: soma, margemComR: margemComR, margemComP: margemComP, diferencaVendaBruta: diferencaVendaBruta,
       supRamon: supRamon, supAnai: supAnai, entradaReal: entradaReal, saldoConta: saldoConta, totalCrediario: totalCrediario,
       totalAtivosReceita: totalAtivosReceita, totalAtivosFuturo: totalAtivosFuturo,
       receitasPlanos: receitasPlanos, despesasReal: despesasReal, nf: nf, saldoPlanos: saldoPlanos, planosRamon: planosRamon, planosAnai: planosAnai,
@@ -4399,7 +4394,7 @@ window.initGerencial = async function initGerencial(){
   function campo(id, label, valor, opts){
     opts = opts || {};
     return '<div class="field"><label style="display:block;font-size:12px;color:var(--muted);margin:8px 0 4px">' + label + '</label>'
-      + '<input class="mod-campo" type="text" inputmode="decimal" id="' + id + '" value="' + (valor || valor===0 ? String(valor).replace('.',',') : '') + '" placeholder="0,00"></div>';
+      + '<input class="mod-campo" type="text" inputmode="decimal" id="' + id + '" value="' + (valor || valor===0 ? brl(valor) : '') + '" placeholder="R$ 0,00"></div>';
   }
 
   function render(){
@@ -4417,25 +4412,28 @@ window.initGerencial = async function initGerencial(){
       h += '<div class="mod-item"><span class="txt">Convidados</span><span class="mod-tag">' + recepcaoResumo.convidado + '</span></div>';
       h += '</div>';
       h += '<div class="mod-item"><span class="txt">Viraram aluno</span><span class="mod-tag ok">' + recepcaoResumo.viraramAluno + '</span></div>';
-      h += '<div class="mod-item"><span class="txt">Repasse devido — Dr. Mário</span><span class="mod-tag">' + recepcaoResumo.mario.agendados + ' de ' + recepcaoResumo.mario.total + ' agendados</span></div>';
-      h += '<div class="mod-item"><span class="txt">Repasse devido — Dra. Tomázia</span><span class="mod-tag">' + recepcaoResumo.tomazia.agendados + ' de ' + recepcaoResumo.tomazia.total + ' agendados</span></div>';
       h += '</div>';
     }
 
     h += '<div class="card"><h3>Suplementos — vendas do mês</h3>';
     h += '<div class="ger-grid2">';
     h += campo('ger-qtd', 'Quantidade em produtos', dados.quantidade_produtos);
+    h += campo('ger-vendabruta', 'Venda bruta', dados.venda_bruta);
+    h += '</div>';
+    h += '<div class="ger-grid2">';
     h += campo('ger-crediario', 'Crediário', dados.crediario);
     h += campo('ger-cartao', 'Cartão', dados.cartao);
     h += campo('ger-dinpix', 'Dinheiro / PIX', dados.dinheiro_pix);
     h += '</div>';
-    h += '<div class="mod-item"><span class="txt">Soma</span><span class="mod-tag ok">' + brl(c.soma) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">Soma (crediário + cartão + dinheiro/PIX)</span><span class="mod-tag ok">' + brl(c.soma) + '</span></div>';
+    if (dados.venda_bruta || dados.venda_bruta === 0){
+      var confereVenda = Math.abs(c.diferencaVendaBruta) < 0.01;
+      h += '<div class="mod-item"><span class="txt">Confronto com a venda bruta</span><span class="mod-tag' + (confereVenda ? ' ok' : ' grave') + '">' + (confereVenda ? 'confere' : 'diferença de ' + brl(Math.abs(c.diferencaVendaBruta))) + '</span></div>';
+    }
     h += '<div class="ger-grid2">';
     h += campo('ger-custo', 'Custo venda', dados.custo_venda);
-    h += campo('ger-quebra', 'Quebra / Doação', dados.quebra_doacao);
     h += '</div>';
-    h += '<div class="mod-item"><span class="txt">Margem comercial</span><span class="mod-tag">' + brl(c.margemComR) + ' · ' + pct(c.margemComP) + '</span></div>';
-    h += '<div class="mod-item"><span class="txt">Margem final</span><span class="mod-tag' + (c.margemFinR>=0?' ok':' grave') + '">' + brl(c.margemFinR) + ' · ' + pct(c.margemFinP) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">Margem comercial</span><span class="mod-tag' + (c.margemComR>=0?' ok':' grave') + '">' + brl(c.margemComR) + ' · ' + pct(c.margemComP) + '</span></div>';
     h += '<div class="mod-item"><span class="txt">75% Ramon</span><span class="mod-tag">' + brl(c.supRamon) + '</span></div>';
     h += '<div class="mod-item"><span class="txt">25% Anai</span><span class="mod-tag">' + brl(c.supAnai) + '</span></div>';
     h += '</div>';
@@ -4445,6 +4443,7 @@ window.initGerencial = async function initGerencial(){
     h += campo('ger-saldopass', 'Saldo mês passado (carregado do mês anterior — pode ajustar)', dados.saldo_mes_passado);
     h += '<div class="mod-item"><span class="txt">Entrada desse mês (caixa real)</span><span class="mod-tag">' + brl(c.entradaReal) + '</span></div>';
     h += campo('ger-compras', 'Compras desse mês', dados.compras_mes);
+    h += '<div class="mod-item"><span class="txt">Saída — compras desse mês</span><span class="mod-tag grave">-' + brl(n(dados.compras_mes)) + '</span></div>';
     h += '<div class="mod-item"><span class="txt">Participação Ramon / Anai</span><span class="mod-tag">' + brl(c.supRamon) + ' / ' + brl(c.supAnai) + '</span></div>';
     h += '<div class="mod-item"><span class="txt"><b>Saldo em conta</b></span><span class="mod-tag' + (c.saldoConta>=0?' ok':' grave') + '"><b>' + brl(c.saldoConta) + '</b></span></div>';
     h += '</div>';
@@ -4468,11 +4467,11 @@ window.initGerencial = async function initGerencial(){
 
     h += '<div class="card"><h3>Planos — modalidades do mês</h3>';
     h += '<div class="cardsub">Receita = já realizado. Futuro = a receber / projeção.</div>';
-    [['musc','Musculação'],['aulas','Aulas coletivas'],['atend','Atendimentos'],['arecceb','A receber cartão'],['totalpass','Total Pass'],['wellhub','Well Hub']].forEach(function(m){
+    [['musc','Musculação',true],['aulas','Aulas coletivas',false],['atend','Atendimentos',false],['arecceb','A receber cartão',true],['totalpass','Total Pass',true],['wellhub','Well Hub',true]].forEach(function(m){
       h += '<div class="ger-mod"><div class="ger-mod-nome">' + m[1] + '</div>';
       h += '<div class="ger-grid2">';
       h += campo('ger-' + m[0] + '-r', 'Receita', dados[m[0]+'_receita']);
-      h += campo('ger-' + m[0] + '-f', 'Futuro', dados[m[0]+'_futuro']);
+      if (m[2]) h += campo('ger-' + m[0] + '-f', 'Futuro', dados[m[0]+'_futuro']);
       h += '</div></div>';
     });
     h += '<div class="mod-item"><span class="txt"><b>Total Ativos</b></span><span class="mod-tag"><b>' + brl(c.totalAtivosReceita) + '</b> · futuro ' + brl(c.totalAtivosFuturo) + '</span></div>';
@@ -4487,12 +4486,15 @@ window.initGerencial = async function initGerencial(){
     h += '<div class="mod-item"><span class="txt">25% Anai</span><span class="mod-tag">' + brl(c.planosAnai) + '</span></div>';
     h += '</div>';
 
-    h += '<div class="card"><h3>Nota fiscal a emitir em Planos</h3>';
-    h += '<div class="cardsub">O que passou por cartão (Infinity) e NexfitPay, menos o que já saiu com nota no sistema de suplementos — pelo cartão. A diferença é o que falta faturar em Planos.</div>';
+    h += '<div class="card"><h3>Nota fiscal a emitir</h3>';
+    h += '<div class="cardsub">(NexfitPay + Infinity) menos as notas já emitidas de Planos e Suplementos. A diferença é o que ainda falta emitir pra fechar o fiscal do mês.</div>';
     h += '<div class="mod-item"><span class="txt">Infinity (crédito + débito, Planos)</span><span class="mod-tag">' + brl(c.nf.infinity) + '</span></div>';
     h += campo('ger-nf-nexfitpay', 'NexfitPay (venda no cartão online — digite)', dados.nf_nexfitpay);
-    h += '<div class="mod-item"><span class="txt">Já faturado em Suplementos (cartão)</span><span class="mod-tag">-' + brl(c.nf.suplemento) + '</span></div>';
-    h += '<div class="mod-item"><span class="txt"><b>Emitir nota em Planos</b></span><span class="mod-tag ok"><b>' + brl(c.nf.total) + '</b></span></div>';
+    h += '<div class="ger-grid2">';
+    h += campo('ger-nf-notas-planos', 'Notas emitidas — Planos', dados.nf_notas_planos);
+    h += campo('ger-nf-notas-suplementos', 'Notas emitidas — Suplementos', dados.nf_notas_suplementos);
+    h += '</div>';
+    h += '<div class="mod-item"><span class="txt"><b>Falta emitir</b></span><span class="mod-tag' + (c.nf.total > 0 ? ' grave' : ' ok') + '"><b>' + brl(c.nf.total) + '</b></span></div>';
     h += '</div>';
 
     h += '<div class="card"><h3>Geral — divisão da sociedade</h3>';
@@ -4507,19 +4509,26 @@ window.initGerencial = async function initGerencial(){
 
     CAMPOS_NUM.forEach(function(c2){
       var idMap = {
-        quantidade_produtos:'ger-qtd', crediario:'ger-crediario', cartao:'ger-cartao', dinheiro_pix:'ger-dinpix',
-        custo_venda:'ger-custo', quebra_doacao:'ger-quebra', saldo_mes_passado:'ger-saldopass', compras_mes:'ger-compras',
+        quantidade_produtos:'ger-qtd', venda_bruta:'ger-vendabruta', crediario:'ger-crediario', cartao:'ger-cartao', dinheiro_pix:'ger-dinpix',
+        custo_venda:'ger-custo', saldo_mes_passado:'ger-saldopass', compras_mes:'ger-compras',
         valor_custo_estoque:'ger-vcusto', valor_venda_estoque:'ger-vvenda', em_transito:'ger-transito',
         fiado_a_vencer:'ger-avencer', fiado_vencido_mais60:'ger-v60mais', fiado_vencido_menos60:'ger-v60menos',
-        musc_receita:'ger-musc-r', musc_futuro:'ger-musc-f', aulas_receita:'ger-aulas-r', aulas_futuro:'ger-aulas-f',
-        atend_receita:'ger-atend-r', atend_futuro:'ger-atend-f', arecceb_receita:'ger-arecceb-r', arecceb_futuro:'ger-arecceb-f',
+        musc_receita:'ger-musc-r', musc_futuro:'ger-musc-f', aulas_receita:'ger-aulas-r',
+        atend_receita:'ger-atend-r', arecceb_receita:'ger-arecceb-r', arecceb_futuro:'ger-arecceb-f',
         totalpass_receita:'ger-totalpass-r', totalpass_futuro:'ger-totalpass-f', wellhub_receita:'ger-wellhub-r', wellhub_futuro:'ger-wellhub-f',
-        despesas_pagas:'ger-despesas', nf_nexfitpay:'ger-nf-nexfitpay'
+        despesas_pagas:'ger-despesas', nf_nexfitpay:'ger-nf-nexfitpay',
+        nf_notas_planos:'ger-nf-notas-planos', nf_notas_suplementos:'ger-nf-notas-suplementos'
       };
       var el = document.getElementById(idMap[c2]);
       if (el) el.addEventListener('change', function(){
-        dados[c2] = n(el.value.replace(',','.'));
+        dados[c2] = parseBRL(el.value);
         render();
+      });
+    });
+
+    box.querySelectorAll('.mod-campo[inputmode="decimal"]').forEach(function(el){
+      el.addEventListener('input', function(){
+        el.value = maskBRL(el.value);
       });
     });
 
@@ -4548,12 +4557,11 @@ window.initGerencial = async function initGerencial(){
     var c = calc(row, row.mes);
     return {
       suplementos: {
-        quantidade_produtos: n(row.quantidade_produtos),
+        quantidade_produtos: n(row.quantidade_produtos), venda_bruta: n(row.venda_bruta),
         crediario: n(row.crediario), cartao: n(row.cartao), dinheiro_pix: n(row.dinheiro_pix),
         soma: c.soma,
-        custo_venda: n(row.custo_venda), quebra_doacao: n(row.quebra_doacao),
+        custo_venda: n(row.custo_venda),
         margem_comercial_rs: c.margemComR, margem_comercial_pct: c.margemComP,
-        margem_final_rs: c.margemFinR, margem_final_pct: c.margemFinP,
         saldo_mes_passado: n(row.saldo_mes_passado),
         entrada_real: c.entradaReal,
         compras_mes: n(row.compras_mes),
@@ -4563,8 +4571,8 @@ window.initGerencial = async function initGerencial(){
       planos: {
         modalidades: [
           { nome:'Musculação', receita:n(row.musc_receita), futuro:n(row.musc_futuro) },
-          { nome:'Aulas coletivas', receita:n(row.aulas_receita), futuro:n(row.aulas_futuro) },
-          { nome:'Atendimentos', receita:n(row.atend_receita), futuro:n(row.atend_futuro) },
+          { nome:'Aulas coletivas', receita:n(row.aulas_receita), futuro:0 },
+          { nome:'Atendimentos', receita:n(row.atend_receita), futuro:0 },
           { nome:'A receber cartão', receita:n(row.arecceb_receita), futuro:n(row.arecceb_futuro) },
           { nome:'Total Pass', receita:n(row.totalpass_receita), futuro:n(row.totalpass_futuro) },
           { nome:'Well Hub', receita:n(row.wellhub_receita), futuro:n(row.wellhub_futuro) }
