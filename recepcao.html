@@ -470,6 +470,9 @@ function formAgendarHtml(p, naoAgendouAtual, ym){
   var doMes = AGEND.filter(function(a){ return a.paciente_id === p.id && a.status !== 'recusou' && String(a.data).slice(0,7) === ym; })
     .sort(function(a,b){ return (a.data+(a.hora||'')).localeCompare(b.data+(b.hora||'')); });
   var h = '';
+  h += '<div class="field"><label>Tipo neste ciclo</label><select class="mini-sel" data-tipo-paciente="' + p.id + '">'
+    + TIPOS.map(function(t){ return '<option value="'+t[0]+'"'+(p.tipo===t[0]?' selected':'')+'>'+t[1]+'</option>'; }).join('')
+    + '</select></div>';
   if (doMes.length){
     h += '<div class="rowsub">Agendamentos do mês</div>';
     doMes.forEach(function(a){
@@ -478,20 +481,19 @@ function formAgendarHtml(p, naoAgendouAtual, ym){
          + ['agendado','realizado','faltou','cancelado'].map(function(s){ return '<option value="'+s+'"'+(a.status===s?' selected':'')+'>'+s+'</option>'; }).join('')
          + '</select> <button class="mini danger" data-del-agenda="' + a.id + '">excluir</button></span></div>';
     });
+    // Já tem agendamento este mês: só edita o que existe, sem abrir campo de novo agendamento.
+    h += '<div class="acoes" style="margin-top:10px"><button class="btn-outline" data-nao-agendou="' + p.id + '">' + (naoAgendouAtual ? 'Desmarcar "não agendou"' : 'Não quis agendar este mês') + '</button></div>';
+  } else {
+    h += '<div class="field"><label>Data</label><input type="date" id="ag-data-' + p.id + '" value=""></div>'
+      + '<div class="field"><label>Hora</label><input type="time" id="ag-hora-' + p.id + '"></div>'
+      + '<div class="acoes"><button class="btn" data-salvar-agenda="' + p.id + '">Salvar agendamento</button>'
+      + '<button class="btn-outline" data-nao-agendou="' + p.id + '">' + (naoAgendouAtual ? 'Desmarcar "não agendou"' : 'Não quis agendar este mês') + '</button></div>';
   }
-  h += '<div class="rowsub" style="margin-top:10px">Novo agendamento — só clique em "Salvar" se for marcar uma consulta nova. Pra mudar o status de uma já existente, use o seletinho acima.</div>';
-  h += '<div class="field"><label>Data</label><input type="date" id="ag-data-' + p.id + '" value=""></div>'
-    + '<div class="field"><label>Hora</label><input type="time" id="ag-hora-' + p.id + '"></div>'
-    + '<div class="acoes"><button class="btn" data-salvar-agenda="' + p.id + '">Salvar agendamento</button>'
-    + '<button class="btn-outline" data-nao-agendou="' + p.id + '">' + (naoAgendouAtual ? 'Desmarcar "não agendou"' : 'Não quis agendar este mês') + '</button></div>';
   return h;
 }
 function formEditarHtml(p){
   return '<div class="field"><label>Nome</label><input class="inp" id="ed-nome-' + p.id + '" value="' + escAttr(p.nome) + '"></div>'
     + '<div class="field"><label>Telefone</label><input class="inp" id="ed-tel-' + p.id + '" value="' + escAttr(p.telefone||'') + '"></div>'
-    + '<div class="field"><label>Tipo</label><select id="ed-tipo-' + p.id + '">'
-    + TIPOS.map(function(t){ return '<option value="'+t[0]+'"'+(p.tipo===t[0]?' selected':'')+'>'+t[1]+'</option>'; }).join('')
-    + '</select></div>'
     + '<label class="chk"><input type="checkbox" id="ed-ativo-' + p.id + '"' + (p.ativo !== false ? ' checked' : '') + '> Ativo</label>'
     + '<div class="acoes"><button class="btn" data-salvar-paciente="' + p.id + '">Salvar</button>'
     + '<button class="btn-outline danger" data-arquivar-paciente="' + p.id + '">' + (p.ativo !== false ? 'Arquivar' : 'Reativar') + '</button></div>';
@@ -556,7 +558,7 @@ function renderAgendaMes(){
           var horaTxt = a.hora ? String(a.hora).slice(0,5) : '--:--';
           var wa = p.telefone ? waLink(p.telefone, msgConfirmacaoNutri(p, a, nutriNomeFull)) : null;
           h += '<div class="dia-linha">'
-            + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Agendar">📅</button>'
+            + '<button class="icon-link" data-toggle="agendar" data-pac="' + p.id + '" title="Editar agenda">📅</button>'
             + '<button class="icon-link" data-toggle="editar" data-pac="' + p.id + '" title="Editar">✏️</button> '
             + '<b>' + horaTxt + '</b> - ' + esc(nomeCurto(p.nome))
             + (wa ? ' <a class="icon-link wa" href="' + wa + '" target="_blank" rel="noopener" title="Confirmar WhatsApp">💬</a>' : '')
@@ -742,10 +744,9 @@ async function onPacienteAreaClick(e){
     var nome = document.getElementById('ed-nome-' + v).value.trim();
     if (!nome) return;
     var tel = document.getElementById('ed-tel-' + v).value.trim();
-    var tipo = document.getElementById('ed-tipo-' + v).value;
     var ativo = document.getElementById('ed-ativo-' + v).checked;
     t.disabled = true;
-    var patch = { nome: nome, telefone: tel || null, tipo: tipo, ativo: ativo };
+    var patch = { nome: nome, telefone: tel || null, ativo: ativo };
     var r = await sb.from('nutri_pacientes').update(patch).eq('id', v);
     t.disabled = false;
     if (r.error){ alert('Não consegui salvar.'); return; }
@@ -767,12 +768,34 @@ async function onPacienteAreaClick(e){
 }
 document.getElementById('card-agenda-mes').addEventListener('click', onPacienteAreaClick);
 document.getElementById('card-agenda-mes').addEventListener('change', async function(e){
+  var pacId = e.target.getAttribute('data-tipo-paciente');
+  if (pacId){
+    var novoTipo = e.target.value;
+    var r = await sb.from('nutri_pacientes').update({ tipo: novoTipo }).eq('id', pacId);
+    if (r.error){ console.error('Erro ao salvar tipo:', r.error); alert('Não consegui salvar o tipo: ' + (r.error.message || r.error.code || 'motivo desconhecido')); return; }
+    var p = PACIENTES.filter(function(x){ return x.id === pacId; })[0];
+    if (p) p.tipo = novoTipo;
+    renderRepasse();
+    renderAgendaMes();
+    return;
+  }
   var id = e.target.getAttribute('data-status-agenda');
   if (!id) return;
   var novoStatus = e.target.value;
-  await sb.from('nutri_agendamentos').update({ status: novoStatus }).eq('id', id);
   var a = AGEND.filter(function(x){ return x.id === id; })[0];
+  var statusAnterior = a ? a.status : null;
+  await sb.from('nutri_agendamentos').update({ status: novoStatus }).eq('id', id);
   if (a) a.status = novoStatus;
+  // Consulta virou "realizado": já sugere o tipo do próximo ciclo (alterna
+  // Plano 1↔2, Consulta 1↔2), sem travar — dá pra corrigir na mão depois.
+  if (a && novoStatus === 'realizado' && statusAnterior !== 'realizado'){
+    var p = PACIENTES.filter(function(x){ return x.id === a.paciente_id; })[0];
+    var proximo = p ? proximoTipo(p.tipo) : null;
+    if (p && proximo){
+      var rTipo = await sb.from('nutri_pacientes').update({ tipo: proximo }).eq('id', p.id);
+      if (!rTipo.error) p.tipo = proximo;
+    }
+  }
   renderRepasse();
   renderAgendaMes();
 });
