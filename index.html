@@ -4566,7 +4566,11 @@ window.initGerencial = async function initGerencial(){
       var linha = Object.assign({ mes: mesSel }, dados);
       var res = await sb.from('gerencial_mensal').upsert(linha);
       btnSalvar.disabled = false;
-      if (res.error){ msg.textContent = 'Não consegui salvar — tenta de novo.'; return; }
+      if (res.error){
+        console.error('Erro ao salvar Gerencial:', res.error);
+        msg.textContent = 'Não consegui salvar: ' + (res.error.message || res.error.code || 'motivo desconhecido');
+        return;
+      }
       msg.textContent = 'Salvo.';
       var ok = await atualizarResumoGerencialTodos();
       msg.textContent = ok ? 'Salvo — resumo atualizado.' : 'Mês salvo, mas o resumo não atualizou. Tenta de novo em instantes.';
