@@ -4401,6 +4401,11 @@ window.initGerencial = async function initGerencial(){
 
   function campo(id, label, valor, opts){
     opts = opts || {};
+    if (opts.numero){
+      var valNum = (valor || valor===0) ? String(Math.round(n(valor))) : '';
+      return '<div class="field"><label style="display:block;font-size:12px;color:var(--muted);margin:8px 0 4px">' + label + '</label>'
+        + '<input class="mod-campo mod-campo-numero" type="text" inputmode="numeric" id="' + id + '" value="' + valNum + '" placeholder="0"></div>';
+    }
     return '<div class="field"><label style="display:block;font-size:12px;color:var(--muted);margin:8px 0 4px">' + label + '</label>'
       + '<input class="mod-campo" type="text" inputmode="decimal" id="' + id + '" value="' + (valor || valor===0 ? brl(valor) : '') + '" placeholder="R$ 0,00"></div>';
   }
@@ -4425,7 +4430,7 @@ window.initGerencial = async function initGerencial(){
 
     h += '<div class="card"><h3>Suplementos — vendas do mês</h3>';
     h += '<div class="ger-grid2">';
-    h += campo('ger-qtd', 'Quantidade em produtos', dados.quantidade_produtos);
+    h += campo('ger-qtd', 'Quantidade em produtos', dados.quantidade_produtos, { numero: true });
     h += campo('ger-vendabruta', 'Venda bruta', dados.venda_bruta);
     h += '</div>';
     h += '<div class="ger-grid2">';
@@ -4531,7 +4536,7 @@ window.initGerencial = async function initGerencial(){
       };
       var el = document.getElementById(idMap[c2]);
       if (el) el.addEventListener('change', function(){
-        dados[c2] = parseBRL(el.value);
+        dados[c2] = el.classList.contains('mod-campo-numero') ? (parseInt(el.value, 10) || 0) : parseBRL(el.value);
         render();
       });
     });
@@ -4539,6 +4544,11 @@ window.initGerencial = async function initGerencial(){
     box.querySelectorAll('.mod-campo[inputmode="decimal"]').forEach(function(el){
       el.addEventListener('input', function(){
         el.value = maskBRL(el.value);
+      });
+    });
+    box.querySelectorAll('.mod-campo-numero').forEach(function(el){
+      el.addEventListener('input', function(){
+        el.value = el.value.replace(/\D/g, '');
       });
     });
 
