@@ -1139,7 +1139,7 @@ function buildAnualSocios(diaria, refMes){
     var label = mesLabelTop(ym);
     if (mesesEstaticos[label]) return;
     var g = gerPorMes[ym];
-    var supSaldoG = (g.suplementos && g.suplementos.margem_final_rs) || 0;
+    var supSaldoG = (g.suplementos && g.suplementos.margem_comercial_rs) || 0;
     var planoSaldoG = (g.planos && g.planos.saldo) || 0;
     meses.push({
       mes: label,
