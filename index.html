@@ -3652,13 +3652,11 @@ window.initMenu = function initMenu(){
     try {
       var ymK = window.mesGlobal || hoje().slice(0,7);
       kResMes = buildDiaria(ymK).confronto.saldo_final_apurado;
-      // "Caixa hoje" é o saldo bancário atual (não existe um histórico por mês) —
-      // só faz sentido mostrar quando o mês selecionado é o mês corrente.
-      if (ymK === hoje().slice(0,7)){
-        var soK = L.saldoOnline || (typeof EXTERNAL !== 'undefined' ? EXTERNAL.confronto_online : null) || {};
-        kCaixa = (typeof soK.total === 'number') ? soK.total
-               : nD(soK.Dinheiro || soK.dinheiro) + nD(soK.C6 || soK.c6) + nD(soK.Infinity || soK.infinity);
-      }
+      // Saldo do caixa no fechamento: o saldo bancário real no fechamento daquele
+      // mês — ao vivo para o mês corrente, foto histórica (gerencial) para meses
+      // já fechados. Mesma fonte usada na Conciliação (computeOnlineTop).
+      var onlineK = computeOnlineTop(ymK);
+      kCaixa = onlineK.semDado ? null : onlineK.total;
       var cpK = buildContasPagar(ymK);
       kAPagar = cpK.total.planejado - cpK.total.realizado;
     } catch(e){}
@@ -3784,7 +3782,7 @@ window.initMenu = function initMenu(){
 
     /* ---- Faixa de leitura rápida ---- */
     h += '<div class="hoje-kpis">';
-    h += '<div class="k"><div class="kl">Caixa hoje</div><div class="kv">' + (kCaixa != null ? fmtCompact(kCaixa) : '—') + '</div></div>';
+    h += '<div class="k"><div class="kl">Saldo do caixa no fechamento</div><div class="kv">' + (kCaixa != null ? fmtCompact(kCaixa) : '—') + '</div></div>';
     h += '<div class="k"><div class="kl">Resultado do mês</div><div class="kv' + (kResMes != null && kResMes < 0 ? ' bad' : '') + '">' + (kResMes != null ? fmtCompact(kResMes) : '—') + '</div></div>';
     h += '<div class="k"><div class="kl">A pagar no mês</div><div class="kv">' + (kAPagar != null ? fmtCompact(kAPagar) : '—') + '</div></div>';
     h += '</div>';
