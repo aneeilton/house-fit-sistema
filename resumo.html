@@ -371,11 +371,6 @@
   .linha-final .val { font-weight:800; font-variant-numeric:tabular-nums; }
   .linha-final .val.pos { color:var(--good); }
   .linha-final .val.neg { color:var(--critical); }
-  .tabela-planos { width:100%; border-collapse:collapse; font-size:14px; margin-top:6px; }
-  .tabela-planos th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); padding:6px 4px; border-bottom:1px solid var(--line); }
-  .tabela-planos td { padding:8px 4px; border-bottom:1px solid var(--line); }
-  .tabela-planos td.num { text-align:right; font-variant-numeric:tabular-nums; }
-  .tabela-planos tr.total td { font-weight:700; border-top:2px solid var(--line); border-bottom:0; }
   .barra-item { margin:10px 0; }
   .barra-label { display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px; }
   .barra-trilho { background:var(--line); border-radius:6px; height:10px; overflow:hidden; }
@@ -472,8 +467,7 @@
       });
       h += '</select></div></div>';
 
-      h += '<div class="card"><div class="setor-titulo">Fechamento \u2014 ' + esc(mesLabel(mesEscolhido)) + '</div>';
-      h += '<div class="setor-sub">Resultado do m\u00eas, por setor.</div></div>';
+      h += '<div class="card"><div class="setor-titulo">Fechamento m\u00eas</div></div>';
 
       h += '<div class="card card-suplementos"><div class="setor-titulo">Suplementos</div>';
       h += '<div class="linha-dado"><span class="lbl">Quantidade em produtos</span><span class="val">' + (gs.quantidade_produtos||0) + '</span></div>';
@@ -482,9 +476,7 @@
       h += '<div class="linha-dado"><span class="lbl">Dinheiro / PIX</span><span class="val">' + brl(gs.dinheiro_pix) + '</span></div>';
       h += '<div class="linha-dado"><span class="lbl">Venda bruta (soma)</span><span class="val">' + brl(gs.soma) + '</span></div>';
       h += '<div class="linha-dado"><span class="lbl">Custo venda</span><span class="val">' + saida(gs.custo_venda) + '</span></div>';
-      h += '<div class="linha-dado"><span class="lbl">Quebra / Doa\u00e7\u00e3o</span><span class="val">' + saida(gs.quebra_doacao) + '</span></div>';
-      h += '<div class="linha-dado"><span class="lbl">Margem comercial</span><span class="val">' + brl(gs.margem_comercial_rs) + ' \u00b7 ' + pctFmt(gs.margem_comercial_pct) + '</span></div>';
-      h += '<div class="linha-final"><span class="lbl">Lucro Suplementos</span><span class="val ' + ((gs.margem_final_rs||0)>=0?'pos':'neg') + '">' + brl(gs.margem_final_rs) + ' \u00b7 ' + pctFmt(gs.margem_final_pct) + '</span></div>';
+      h += '<div class="linha-final"><span class="lbl">Lucro Suplementos</span><span class="val ' + ((gs.margem_comercial_rs||0)>=0?'pos':'neg') + '">' + brl(gs.margem_comercial_rs) + ' \u00b7 ' + pctFmt(gs.margem_comercial_pct) + '</span></div>';
 
       h += '<div class="setor-sub" style="margin-top:18px">Caixa do setor \u2014 o que sobra para pagar as compras do m\u00eas seguinte.</div>';
       h += '<div class="linha-dado"><span class="lbl">Saldo m\u00eas passado</span><span class="val">' + brl(gs.saldo_mes_passado) + '</span></div>';
@@ -497,17 +489,15 @@
       h += '</div>';
 
       h += '<div class="card card-planos"><div class="setor-titulo">Planos</div>';
-      h += '<table class="tabela-planos"><thead><tr><th>Modalidade</th><th style="text-align:right">Receita</th></tr></thead><tbody>';
       (gp.modalidades||[]).forEach(function(m){
-        h += '<tr><td>' + esc(m.nome) + '</td><td class="num">' + brl(m.receita) + '</td></tr>';
+        h += '<div class="linha-dado"><span class="lbl">' + esc(m.nome) + '</span><span class="val">' + brl(m.receita) + '</span></div>';
       });
-      h += '<tr class="total"><td>Total</td><td class="num">' + brl(gp.total_receita) + '</td></tr>';
-      h += '</tbody></table>';
+      h += '<div class="linha-dado"><span class="lbl"><b>Total</b></span><span class="val"><b>' + brl(gp.total_receita) + '</b></span></div>';
       h += '<a class="linha-dado linha-link" style="margin-top:6px" href="resumo-despesas.html?mes=' + mesEscolhido + '"><span class="lbl">Despesas pagas</span><span class="val">' + saida(gp.despesas_pagas) + '</span></a>';
       h += '<div class="linha-final"><span class="lbl">Lucro final Planos</span><span class="val ' + ((gp.saldo||0)>=0?'pos':'neg') + '">' + brl(gp.saldo) + '</span></div>';
       h += '</div>';
 
-      var lucroSup = gs.margem_final_rs || 0, lucroPla = gp.saldo || 0;
+      var lucroSup = gs.margem_comercial_rs || 0, lucroPla = gp.saldo || 0;
       if (lucroSup >= 0 && lucroPla >= 0 && (lucroSup + lucroPla) > 0){
         var maior = Math.max(lucroSup, lucroPla);
         h += '<div class="card"><div class="setor-titulo" style="font-size:16px">Suplementos \u00d7 Planos</div>';
@@ -528,17 +518,15 @@
       var est = g.estoque || {}, fia = g.fiado || {};
       var fiadoTotal = (fia.vencido_mais60||0) + (fia.vencido_menos60||0) + (fia.a_vencer||0);
       h += '<div class="card card-estoque"><div class="setor-titulo">Estoque <span style="font-weight:400;color:var(--muted);font-size:15px">\u2014 venda ' + brl(est.valor_venda) + '</span></div>';
-      h += '<div class="kpis kpis-2col">';
-      h += '<div class="kpi"><div class="label">Valor de custo</div><div class="value grande">' + brl(est.valor_custo) + '</div></div>';
-      h += '<div class="kpi"><div class="label">Valor de venda</div><div class="value grande">' + brl(est.valor_venda) + '</div></div>';
-      h += '</div></div>';
+      h += '<div class="linha-dado"><span class="lbl">Valor de custo</span><span class="val">' + brl(est.valor_custo) + '</span></div>';
+      h += '<div class="linha-dado"><span class="lbl">Valor de venda</span><span class="val">' + brl(est.valor_venda) + '</span></div>';
+      h += '</div>';
 
       h += '<div class="card card-fiado"><div class="setor-titulo">Fiado <span style="font-weight:400;color:var(--muted);font-size:15px">\u2014 total ' + brl(fiadoTotal) + '</span></div>';
-      h += '<div class="kpis kpis-2col">';
-      h += '<div class="kpi"><div class="label">Vencido + 60 dias</div><div class="value grande">' + brl(fia.vencido_mais60) + '</div></div>';
-      h += '<div class="kpi"><div class="label">Vencido - 60 dias</div><div class="value grande">' + brl(fia.vencido_menos60) + '</div></div>';
-      h += '<div class="kpi"><div class="label">A vencer</div><div class="value grande">' + brl(fia.a_vencer) + '</div></div>';
-      h += '</div></div>';
+      h += '<div class="linha-dado"><span class="lbl">Vencido + 60 dias</span><span class="val">' + brl(fia.vencido_mais60) + '</span></div>';
+      h += '<div class="linha-dado"><span class="lbl">Vencido - 60 dias</span><span class="val">' + brl(fia.vencido_menos60) + '</span></div>';
+      h += '<div class="linha-dado"><span class="lbl">A vencer</span><span class="val">' + brl(fia.a_vencer) + '</span></div>';
+      h += '</div>';
 
       h += '<div class="card card-links"><div class="setor-titulo">Links para confer\u00eancia</div>';
       h += '<div class="setor-sub">Confronte estes n\u00fameros com os sistemas originais.</div>';
