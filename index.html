@@ -4644,6 +4644,12 @@ window.initGerencial = async function initGerencial(){
       if (atual.error) return false;
       var rdados = atual.data.dados || {};
       rdados.gerencial_por_mes = porMes;
+      // Também atualiza "anual_mensal" aqui — é o que a página resumo.html lê pra
+      // mostrar o Fechamento anual mês a mês; sem isso, um mês fechado na Gerencial
+      // só aparecia lá depois de algum lançamento mexer em atualizarResumoFinanceiro.
+      if (typeof DATA !== 'undefined' && DATA.anual_socios){
+        rdados.anual_mensal = { meses: DATA.anual_socios.meses, totalRamon: DATA.anual_socios.totalRamon, totalAnai: DATA.anual_socios.totalAnai };
+      }
       var res2 = await sb.from('resumo_cache').update({ dados: rdados, atualizado_em: new Date().toISOString() }).eq('id',1);
       return !res2.error;
     }catch(e){ return false; }
