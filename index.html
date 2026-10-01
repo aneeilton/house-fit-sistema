@@ -3647,14 +3647,18 @@ window.initMenu = function initMenu(){
       }
     } catch(e){}
 
-    // leitura rápida da Hoje: caixa / resultado do mês / a pagar
+    // leitura rápida da Hoje: caixa / resultado do mês / a pagar — respeita o mês selecionado no topo
     var kCaixa = null, kResMes = null, kAPagar = null;
     try {
-      var ymK = hoje().slice(0,7);
+      var ymK = window.mesGlobal || hoje().slice(0,7);
       kResMes = buildDiaria(ymK).confronto.saldo_final_apurado;
-      var soK = L.saldoOnline || (typeof EXTERNAL !== 'undefined' ? EXTERNAL.confronto_online : null) || {};
-      kCaixa = (typeof soK.total === 'number') ? soK.total
-             : nD(soK.Dinheiro || soK.dinheiro) + nD(soK.C6 || soK.c6) + nD(soK.Infinity || soK.infinity);
+      // "Caixa hoje" é o saldo bancário atual (não existe um histórico por mês) —
+      // só faz sentido mostrar quando o mês selecionado é o mês corrente.
+      if (ymK === hoje().slice(0,7)){
+        var soK = L.saldoOnline || (typeof EXTERNAL !== 'undefined' ? EXTERNAL.confronto_online : null) || {};
+        kCaixa = (typeof soK.total === 'number') ? soK.total
+               : nD(soK.Dinheiro || soK.dinheiro) + nD(soK.C6 || soK.c6) + nD(soK.Infinity || soK.infinity);
+      }
       var cpK = buildContasPagar(ymK);
       kAPagar = cpK.total.planejado - cpK.total.realizado;
     } catch(e){}
