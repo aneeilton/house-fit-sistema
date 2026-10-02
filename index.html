@@ -4903,6 +4903,12 @@ window.initEscala = async function initEscala(){
     return { feriados: sugestaoFeriados(ym), sabados: sugestaoSabados(ym), salvo:false };
   }
 
+  function nomesFeriado(f){
+    var lista = [];
+    [f.trabalha, f.trabalha2].forEach(function(n){ if (n && lista.indexOf(n) === -1) lista.push(n); });
+    return lista;
+  }
+
   function tabelaImpressao(){
     var h = '<div class="escala-print">';
     h += '<table><thead><tr><th class="escala-titulo" colspan="3">Escala Feriados — ' + esc(mesLabel(mesSel)) + '</th></tr>';
@@ -4911,7 +4917,8 @@ window.initEscala = async function initEscala(){
       h += '</tbody></table><div class="escala-vazio-print">Sem feriado neste mês.</div><table><tbody>';
     } else {
       dadosMes.feriados.forEach(function(f){
-        h += '<tr><td>' + ddmmFromISO(f.data) + '<br>' + diaSemanaAbrev(f.data) + '</td><td>' + esc(f.horario || (f.trabalha ? '' : 'Fechado')) + '</td><td>' + esc(f.trabalha || 'Folga') + '</td></tr>';
+        var quemTrabalha = nomesFeriado(f);
+        h += '<tr><td>' + ddmmFromISO(f.data) + '<br>' + diaSemanaAbrev(f.data) + '</td><td>' + esc(f.horario || (quemTrabalha.length ? '' : 'Fechado')) + '</td><td>' + esc(quemTrabalha.join(' e ') || 'Folga') + '</td></tr>';
       });
     }
     h += '</tbody></table></div>';
@@ -4957,6 +4964,12 @@ window.initEscala = async function initEscala(){
         h += '<option value="' + esc(nomeOp) + '"' + (f.trabalha===nomeOp?' selected':'') + '>' + esc(nomeOp) + '</option>';
       });
       h += '<option value="Todos"' + (f.trabalha==='Todos'?' selected':'') + '>Todos</option>';
+      h += '</select>';
+      h += '<select class="mod-campo" data-fer-trabalha2="' + idx + '" style="flex:1;min-width:130px"' + (f.trabalha==='Todos' ? ' disabled' : '') + '>';
+      h += '<option value="">2º funcionário (opcional)</option>';
+      opcoesFeriado.forEach(function(nomeOp){
+        h += '<option value="' + esc(nomeOp) + '"' + (f.trabalha2===nomeOp?' selected':'') + '>' + esc(nomeOp) + '</option>';
+      });
       h += '</select>';
       h += '<button class="mod-mini" data-fer-remover="' + idx + '">remover</button>';
       h += '</div>';
@@ -5005,7 +5018,15 @@ window.initEscala = async function initEscala(){
       el.addEventListener('change', function(){ dadosMes.feriados[+el.dataset.ferHorario].horario = el.value; });
     });
     box.querySelectorAll('[data-fer-trabalha]').forEach(function(el){
-      el.addEventListener('change', function(){ dadosMes.feriados[+el.dataset.ferTrabalha].trabalha = el.value; });
+      el.addEventListener('change', function(){
+        var f = dadosMes.feriados[+el.dataset.ferTrabalha];
+        f.trabalha = el.value;
+        if (el.value === 'Todos') f.trabalha2 = '';
+        render();
+      });
+    });
+    box.querySelectorAll('[data-fer-trabalha2]').forEach(function(el){
+      el.addEventListener('change', function(){ dadosMes.feriados[+el.dataset.ferTrabalha2].trabalha2 = el.value; });
     });
     box.querySelectorAll('[data-fer-remover]').forEach(function(el){
       el.addEventListener('click', function(){ dadosMes.feriados.splice(+el.dataset.ferRemover, 1); render(); });
