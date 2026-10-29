@@ -4521,22 +4521,22 @@ window.initGerencial = async function initGerencial(){
     h += '<div class="kpi"><h4>25% Anai</h4><div class="v">' + brl(c.geralAnai) + '</div></div>';
     h += '</div></div>';
 
-    h += '<div class="mod-linha" style="margin:14px 0 30px"><button class="btn-dash" id="ger-salvar">Salvar mês</button></div>';
+    h += '<div class="mod-linha" style="margin:14px 0 30px;align-items:center"><button class="btn-dash" id="ger-salvar">Salvar mês</button><span id="msg-gerencial-rodape" class="mod-msg" style="margin-left:12px"></span></div>';
 
     box.innerHTML = h;
 
+    var idMap = {
+      quantidade_produtos:'ger-qtd', venda_bruta:'ger-vendabruta', crediario:'ger-crediario', cartao:'ger-cartao', dinheiro_pix:'ger-dinpix',
+      custo_venda:'ger-custo', saldo_mes_passado:'ger-saldopass', compras_mes:'ger-compras',
+      valor_custo_estoque:'ger-vcusto', valor_venda_estoque:'ger-vvenda', em_transito:'ger-transito',
+      fiado_a_vencer:'ger-avencer', fiado_vencido_mais60:'ger-v60mais', fiado_vencido_menos60:'ger-v60menos',
+      musc_receita:'ger-musc-r', musc_futuro:'ger-musc-f', aulas_receita:'ger-aulas-r',
+      atend_receita:'ger-atend-r', arecceb_receita:'ger-arecceb-r', arecceb_futuro:'ger-arecceb-f',
+      totalpass_receita:'ger-totalpass-r', totalpass_futuro:'ger-totalpass-f', wellhub_receita:'ger-wellhub-r', wellhub_futuro:'ger-wellhub-f',
+      despesas_pagas:'ger-despesas', nf_nexfitpay:'ger-nf-nexfitpay',
+      nf_notas_planos:'ger-nf-notas-planos', nf_notas_suplementos:'ger-nf-notas-suplementos'
+    };
     CAMPOS_NUM.forEach(function(c2){
-      var idMap = {
-        quantidade_produtos:'ger-qtd', venda_bruta:'ger-vendabruta', crediario:'ger-crediario', cartao:'ger-cartao', dinheiro_pix:'ger-dinpix',
-        custo_venda:'ger-custo', saldo_mes_passado:'ger-saldopass', compras_mes:'ger-compras',
-        valor_custo_estoque:'ger-vcusto', valor_venda_estoque:'ger-vvenda', em_transito:'ger-transito',
-        fiado_a_vencer:'ger-avencer', fiado_vencido_mais60:'ger-v60mais', fiado_vencido_menos60:'ger-v60menos',
-        musc_receita:'ger-musc-r', musc_futuro:'ger-musc-f', aulas_receita:'ger-aulas-r',
-        atend_receita:'ger-atend-r', arecceb_receita:'ger-arecceb-r', arecceb_futuro:'ger-arecceb-f',
-        totalpass_receita:'ger-totalpass-r', totalpass_futuro:'ger-totalpass-f', wellhub_receita:'ger-wellhub-r', wellhub_futuro:'ger-wellhub-f',
-        despesas_pagas:'ger-despesas', nf_nexfitpay:'ger-nf-nexfitpay',
-        nf_notas_planos:'ger-nf-notas-planos', nf_notas_suplementos:'ger-nf-notas-suplementos'
-      };
       var el = document.getElementById(idMap[c2]);
       if (el) el.addEventListener('change', function(){
         dados[c2] = el.classList.contains('mod-campo-numero') ? (parseInt(el.value, 10) || 0) : parseBRL(el.value);
@@ -4558,8 +4558,16 @@ window.initGerencial = async function initGerencial(){
     var btnSalvar = document.getElementById('ger-salvar');
     if (btnSalvar) btnSalvar.addEventListener('click', async function(){
       btnSalvar.disabled = true;
-      var msg = document.getElementById('msg-gerencial');
+      var msgTopo = document.getElementById('msg-gerencial');
+      var msgRodape = document.getElementById('msg-gerencial-rodape');
+      var msg = { set textContent(t){ if (msgTopo) msgTopo.textContent = t; if (msgRodape) msgRodape.textContent = t; } };
       msg.textContent = 'Salvando…';
+      // Lê o que está digitado agora em cada campo. Só confiar no evento "change" perde o último valor
+      // quando se toca em "Salvar mês" sem sair do campo (acontece no celular).
+      CAMPOS_NUM.forEach(function(c2){
+        var campoEl = document.getElementById(idMap[c2]);
+        if (campoEl) dados[c2] = campoEl.classList.contains('mod-campo-numero') ? (parseInt(campoEl.value, 10) || 0) : parseBRL(campoEl.value);
+      });
       if (mesSel === mesAtual()){
         var soAgora = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.saldoOnline) ? LANCAMENTOS.saldoOnline : {};
         dados.saldo_online_dinheiro = n(soAgora.Dinheiro);
@@ -4576,7 +4584,9 @@ window.initGerencial = async function initGerencial(){
       }
       msg.textContent = 'Salvo.';
       var ok = await atualizarResumoGerencialTodos();
-      msg.textContent = ok ? 'Salvo — resumo atualizado.' : 'Mês salvo, mas o resumo não atualizou. Tenta de novo em instantes.';
+      var textoFinal = ok ? 'Salvo — resumo atualizado.' : 'Mês salvo, mas o resumo não atualizou. Tenta de novo em instantes.';
+      render();   // atualiza os totais da tela com o que acabou de ser salvo
+      ['msg-gerencial', 'msg-gerencial-rodape'].forEach(function(idMsg){ var e = document.getElementById(idMsg); if (e) e.textContent = textoFinal; });
     });
   }
 
